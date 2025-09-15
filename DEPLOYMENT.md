@@ -12,6 +12,13 @@ When deploying to Render.com, you need to manually set these environment variabl
 #### Optional
 - `SENTRY_DSN` - For error tracking (optional)
 
+### Memory Optimization
+
+The app is optimized for Render's free tier (512MB memory limit):
+- Uses single worker process (`-w 1`) instead of multiple workers
+- Extended timeout (`--timeout 120`) to handle AI model loading
+- Preload application (`--preload`) to reduce memory overhead
+
 ### Deployment Steps
 
 1. **Fork this repository** to your GitHub account
