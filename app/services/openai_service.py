@@ -4,6 +4,7 @@ import openai
 import structlog
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
+import re
 
 from app.core.config import settings
 from app.models.document import Document
@@ -15,11 +16,42 @@ logger = structlog.get_logger()
 openai.api_key = settings.OPENAI_API_KEY
 
 
+class OpenAIParameterError(Exception):
+    """Raised when the OpenAI API reports an unsupported parameter or value.
+
+    Attributes:
+        param: the name of the offending parameter (if available)
+        message: original error message
+    """
+
+    def __init__(self, param: str | None, message: str):
+        super().__init__(message)
+        self.param = param
+        self.message = message
+
+
 class OpenAIService:
     """Service for OpenAI API integration."""
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+
+    def _safe_chat_create(self, **kwargs):
+        """Call chat.completions.create and raise OpenAIParameterError when the
+        API reports unsupported parameters or values.
+        """
+        try:
+            return self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            msg = str(e)
+            # Look for explicit unsupported parameter/value messages
+            m = re.search(r"Unsupported (?:parameter|value): '\\'([^\\']+)\\'", msg)
+            if not m:
+                m = re.search(r"Unsupported (?:parameter|value): '([^']+)'", msg)
+
+            param = m.group(1) if m else None
+            # Raise a structured error the API layer can handle
+            raise OpenAIParameterError(param=param, message=msg)
     
     async def generate_plc_code(
         self,
@@ -46,14 +78,15 @@ class OpenAIService:
             user_prompt = self._build_user_prompt(request, document_context)
             
             # Call OpenAI API
-            response = self.client.chat.completions.create(
+            # Note: newer OpenAI models expect `max_completion_tokens` instead of `max_tokens`.
+            response = self._safe_chat_create(
                 model="gpt-4-turbo-preview",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=request.temperature,
-                max_tokens=request.max_tokens,
+                max_completion_tokens=request.max_tokens,
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0
@@ -66,10 +99,13 @@ class OpenAIService:
             result = self._parse_generated_response(generated_content, request)
             
             # Add generation metadata
+            # Keep the original request value for backwards compatibility while
+            # also indicating the actual parameter passed to the API.
             result["generation_metadata"] = {
                 "model": "gpt-4-turbo-preview",
                 "temperature": request.temperature,
                 "max_tokens": request.max_tokens,
+                "max_completion_tokens": request.max_tokens,
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
@@ -237,7 +273,7 @@ END_PROGRAM
             return {}
         
         try:
-            response = self.client.chat.completions.create(
+            response = self._safe_chat_create(
                 model="gpt-4-turbo-preview",
                 messages=[
                     {
@@ -261,7 +297,7 @@ END_PROGRAM
                     }
                 ],
                 temperature=0.3,
-                max_tokens=1500
+                max_completion_tokens=1500
             )
             
             content = response.choices[0].message.content
@@ -280,11 +316,11 @@ END_PROGRAM
         """
         model = getattr(request, "model", "gpt-5-nano") or "gpt-5-nano"
         try:
-            response = self.client.chat.completions.create(
+            response = self._safe_chat_create(
                 model=model,
                 messages=[{"role": "user", "content": request.user_prompt}],
                 temperature=getattr(request, "temperature", 0.7),
-                max_tokens=getattr(request, "max_tokens", 512)
+                max_completion_tokens=getattr(request, "max_tokens", 512)
             )
 
             content = response.choices[0].message.content

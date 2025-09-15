@@ -244,6 +244,59 @@ alembic downgrade -1
 
 For questions and support, please [create an issue](link-to-issues) or contact [your-email].
 
+## OpenAI parameters: max_tokens vs max_completion_tokens
+
+Note from OpenAI (paraphrased):
+
+"Hi, Atty from OpenAI here — max_tokens continues to be supported in all existing models, but the o1 series only supports max_completion_tokens. We are doing this because max_tokens previously meant both the number of tokens we generated (and billed you for) and the number of tokens you got back in."
+
+What this project does:
+
+- We accept the legacy field `max_tokens` in API requests for backward compatibility.
+- We also accept the newer `max_completion_tokens` field. When both are present the server prefers `max_completion_tokens`.
+- When calling OpenAI, the server sends `max_completion_tokens` to the API (mapped from your request). This prevents errors with newer models that don't accept `max_tokens`.
+
+How to test the OpenAI call (prompt -> response):
+
+1. Ensure your key is in `.env` or exported in the environment as `OPENAI_API_KEY`.
+
+2. Start your environment:
+```bash
+conda activate plc-copilot
+PYTHONPATH=$(pwd) python scripts/live_openai_smoke.py
+```
+
+3. The script will send a simple prompt and print the response content and usage information. It demonstrates the request (prompt) and response (content + usage).
+
+4. To test via the API endpoint (Swagger or curl):
+
+Using Swagger: visit `http://localhost:8000/docs`, open `POST /api/v1/ai/chat`, and try a payload like:
+
+```json
+{
+  "user_prompt": "Explain emergency stop logic for a conveyor",
+  "model": "gpt-5-nano",
+  "temperature": 1.0,
+  "max_tokens": 128
+}
+```
+
+Using curl:
+```bash
+curl -X POST "http://localhost:8000/api/v1/ai/chat" -H "Content-Type: application/json" -d '{"user_prompt":"Say hi","model":"gpt-5-nano","max_tokens":64}'
+```
+
+5. If the target model rejects a parameter (for example, if you accidentally pass `max_tokens` to an o1-series model), the API will return HTTP 400 with a JSON detail indicating the offending parameter and an explanation. Example response:
+
+```json
+HTTP/1.1 400 Bad Request
+{
+  "detail": {"error":"invalid_request","param":"max_tokens","message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}
+}
+```
+
+This project maps and surfaces those errors so callers can correct their requests.
+
 ## Using the API from a Frontend (Quick)
 
 Yes — you can call the backend API from a frontend application. Basic flow:

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import structlog
 
 from app.schemas.openai import ChatRequest, ChatResponse
-from app.services.openai_service import OpenAIService
+from app.services.openai_service import OpenAIService, OpenAIParameterError
 from app.core.database import get_db
 
 router = APIRouter()
@@ -20,6 +20,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         content, usage = await ai.chat_completion(request)
         return ChatResponse(model=request.model or "gpt-5-nano", content=content, usage=usage)
+    except OpenAIParameterError as e:
+        # Surface parameter/value issues from OpenAI as client errors (400)
+        logger.warning("OpenAI parameter error", param=e.param, error=e.message)
+        detail = {"error": "invalid_request", "param": e.param, "message": e.message}
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     except Exception as e:
         logger.error("AI chat failed", error=str(e))

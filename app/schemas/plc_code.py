@@ -32,7 +32,9 @@ class PLCGenerationRequest(BaseModel):
     
     # AI model parameters
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=2000, gt=0, le=4000)
+    # Accept both legacy `max_tokens` and new `max_completion_tokens`.
+    max_tokens: Optional[int] = Field(default=2000, gt=0, le=4000)
+    max_completion_tokens: Optional[int] = Field(default=None, gt=0, le=4000)
     
     # Context parameters
     include_io_definitions: bool = True
