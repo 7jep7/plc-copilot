@@ -325,6 +325,153 @@ sendPrompt("Explain emergency stop logic for a conveyor").then(console.log).catc
 
 If you run the frontend locally during development, enable CORS for your dev origin in `app/core/config.py` BACKEND_CORS_ORIGINS or configure your deployment accordingly.
 
+## API Usage (detailed)
+
+This section documents how to interact with the backend API in a practical way: headers, authentication recommendations, request/response shapes, file uploads, error handling, and examples in curl/JavaScript/Python.
+
+Base URL and common headers
+- Base URL (local dev): http://localhost:8000
+- Versioned API prefix used in examples: /api/v1
+- Common headers:
+  - Content-Type: application/json (for JSON requests)
+  - For file uploads use multipart/form-data with the file field named `file`.
+
+Authentication
+- This project does not enforce an application-level auth scheme by default. In production you should add authentication (JWT or API keys). Keep your OpenAI API key only on the server (in `.env` or platform secrets). Do NOT expose it to clients.
+
+Error format
+- OpenAI parameter/value errors are returned as HTTP 400 with a structured detail object:
+
+```json
+HTTP/1.1 400 Bad Request
+{
+  "detail": {"error":"invalid_request","param":"max_tokens","message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}
+}
+```
+
+- Other server errors use standard FastAPI responses (500 with string detail) unless otherwise handled by an endpoint.
+
+OpenAI parameter handling (max_tokens vs max_completion_tokens)
+- This backend accepts both `max_tokens` (legacy) and `max_completion_tokens` (preferred). If both are provided, `max_completion_tokens` takes precedence.
+- The server maps the request to `max_completion_tokens` when calling the OpenAI client so newer models that reject `max_tokens` work without breaking older callers.
+
+Endpoints (detailed)
+
+1) AI Chat
+- POST /api/v1/ai/chat
+- Description: Send a free-form prompt to a supported LLM and return a text response and usage information.
+- Request JSON fields:
+  - user_prompt: string (required)
+  - model: string (optional, default gpt-5-nano)
+  - temperature: number (0.0 - 2.0) — some models only support default values; parameter errors will be returned as 400.
+  - max_tokens (legacy): integer — legacy alias for `max_completion_tokens`
+  - max_completion_tokens: integer — preferred field for completion limits
+
+- Example request:
+```json
+{
+  "user_prompt": "Explain emergency stop logic for a conveyor",
+  "model": "gpt-5-nano",
+  "temperature": 1.0,
+  "max_completion_tokens": 128
+}
+```
+- Example response:
+```json
+{
+  "model": "gpt-5-nano",
+  "content": "...generated text...",
+  "usage": {"prompt_tokens": 10, "completion_tokens": 64, "total_tokens": 74}
+}
+```
+
+2) PLC code generation
+- POST /api/v1/plc/generate
+- Description: Generate PLC code from a user prompt and optional document context.
+- Request shape (`PLCGenerationRequest`) includes:
+  - user_prompt: string (required)
+  - language: enum (e.g., structured_text)
+  - document_id (optional): applies document context
+  - temperature, max_tokens / max_completion_tokens as above
+  - include_io_definitions: bool
+  - include_safety_checks: bool
+
+- Response shape: `PLCCodeResponse` which includes `source_code`, `generation_parameters`, and `generation_metadata` (model, temperature, token limits and usage).
+
+3) Document management
+- POST /api/v1/documents/upload
+  - Upload a PDF via multipart/form-data with form field `file`.
+  - Example curl:
+    ```bash
+    curl -X POST "http://localhost:8000/api/v1/documents/upload" -F "file=@/path/to/manual.pdf"
+    ```
+  - Response: created document metadata (id, filename, file_path, etc.).
+
+- POST /api/v1/documents/{id}/process
+  - Triggers document analysis using the OpenAI service. Any OpenAI parameter errors during analysis will be surfaced as 400 responses.
+
+4) Digital twin and other endpoints
+- See the endpoint list above; request/response shapes follow the models and schemas in `app/schemas/`.
+
+Examples
+
+Curl (AI chat):
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/ai/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"user_prompt":"Say hi","model":"gpt-5-nano","max_tokens":64}'
+```
+
+JavaScript (browser / frontend example):
+```javascript
+async function sendPrompt(prompt) {
+  const resp = await fetch('/api/v1/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_prompt: prompt, max_tokens: 64 })
+  });
+  if (!resp.ok) throw new Error('API error ' + resp.status);
+  return resp.json();
+}
+
+sendPrompt('Explain emergency stop logic for a conveyor').then(console.log).catch(console.error);
+```
+
+Python (requests):
+```python
+import requests
+
+resp = requests.post('http://localhost:8000/api/v1/ai/chat', json={
+    'user_prompt': 'Say hi',
+    'max_tokens': 64
+})
+resp.raise_for_status()
+data = resp.json()
+print('Model:', data['model'])
+print('Response:', data['content'])
+print('Usage:', data.get('usage'))
+```
+
+Testing prompt -> response (how to observe prompt then response)
+- Quick live test (script included):
+  1. Ensure `.env` contains `OPENAI_API_KEY` or export it in your shell.
+  2. Activate conda env and run:
+     ```bash
+     conda activate plc-copilot
+     PYTHONPATH=$(pwd) python scripts/live_openai_smoke.py
+     ```
+  3. The script will call the `chat_completion` service and print the response content and usage object.
+
+- Using Swagger UI: run the app and open http://localhost:8000/docs → find `POST /api/v1/ai/chat` → paste a request and execute. The UI shows request and response detail.
+
+Integration and automated testing
+- Unit tests and integration tests are in `tests/`. The repository includes `tests/test_integration_openai_param_error.py` which simulates OpenAI returning an unsupported parameter error and asserts the endpoint returns HTTP 400 with a structured error detail.
+
+Tips and notes
+- If a model reports unsupported parameters or values, the API will return a 400 with `detail` describing the `param` and `message`. This lets clients correct the request without guessing what went wrong.
+- Keep model-specific behavior in mind: some models restrict temperature or token limits. Prefer explicit `max_completion_tokens` if targeting the o1 series.
+
+
 ## API Documentation (Detailed)
 
 This project exposes a versioned REST API with OpenAPI documentation automatically generated by FastAPI. When running locally or deployed, visit:

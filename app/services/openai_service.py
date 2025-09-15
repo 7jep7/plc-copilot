@@ -310,21 +310,90 @@ END_PROGRAM
 
     from typing import Tuple
 
-    async def chat_completion(self, request) -> Tuple[str, dict]:
+    async def chat_completion(
+        self,
+        request,
+        retry_on_length: bool = True,
+        retry_max_completion_tokens: int = 512,
+        return_raw: bool = False,
+    ) -> Tuple[str, dict]:
         """
         Simple chat wrapper that sends a single user prompt to the specified model and returns text + usage.
+
+        Features:
+        - Optionally retries once with a larger max_completion_tokens when the model
+          stops with finish_reason == 'length' and produced no visible content.
+        - Optionally returns the raw response as a third element when return_raw=True.
         """
         model = getattr(request, "model", "gpt-5-nano") or "gpt-5-nano"
-        try:
-            response = self._safe_chat_create(
+
+        def _call_with_max(max_tokens_val):
+            return self._safe_chat_create(
                 model=model,
                 messages=[{"role": "user", "content": request.user_prompt}],
                 temperature=getattr(request, "temperature", 0.7),
-                max_completion_tokens=getattr(request, "max_tokens", 512)
+                max_completion_tokens=max_tokens_val,
             )
 
-            content = response.choices[0].message.content
-            usage = getattr(response, "usage", None)
+        try:
+            initial_max = getattr(request, "max_tokens", None)
+            if initial_max is None:
+                initial_max = getattr(request, "max_completion_tokens", 512)
+
+            response = _call_with_max(initial_max)
+
+            # Helper to extract content and usage
+            def _extract(resp):
+                try:
+                    content_val = resp.choices[0].message.content
+                except Exception:
+                    content_val = None
+                usage_val = getattr(resp, "usage", None)
+                return content_val, usage_val
+
+            content, usage = _extract(response)
+
+            # Best-effort to inspect the raw response as a dict for decision logic
+            parsed_raw = None
+            try:
+                parsed_raw = response.to_dict()
+            except Exception:
+                try:
+                    parsed_raw = response.json()
+                except Exception:
+                    parsed_raw = None
+
+            # If the model finished due to length and produced no visible content, optionally retry
+            try:
+                if (
+                    retry_on_length
+                    and parsed_raw
+                    and parsed_raw.get("choices")
+                    and len(parsed_raw.get("choices")) > 0
+                ):
+                    ch0 = parsed_raw.get("choices")[0]
+                    finish = ch0.get("finish_reason")
+                    msg = ch0.get("message") or {}
+                    content_str = msg.get("content") if isinstance(msg, dict) else None
+
+                    if finish == "length" and (not content_str):
+                        logger.warning(
+                            "chat_completion truncated by max tokens; retrying with larger max",
+                            initial_max=initial_max,
+                            retry_max=retry_max_completion_tokens,
+                        )
+                        try:
+                            response = _call_with_max(retry_max_completion_tokens)
+                            content, usage = _extract(response)
+                        except Exception as e:
+                            logger.error("Retry after length truncation failed", error=str(e))
+            except Exception:
+                # Be defensive: don't let diagnostic logic break the normal flow
+                pass
+
+            if return_raw:
+                return content, usage, response
+
             return content, usage
 
         except Exception as e:
