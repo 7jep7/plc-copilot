@@ -94,11 +94,11 @@ celery -A app.worker worker --loglevel=info
 - `GET /api/v1/documents/{id}/extracted-data` - Get extracted technical data
 
 ### PLC Code Generation
-- `POST /api/v1/plc/generate` - Generate PLC code from user prompt
-- `GET /api/v1/plc/` - List generated PLC codes
-- `GET /api/v1/plc/{id}` - Get specific PLC code
-- `POST /api/v1/plc/{id}/validate` - Validate PLC code syntax
-- `POST /api/v1/plc/{id}/compile` - Compile PLC code
+- `POST /api/v1/plc-code/generate` - Generate PLC code from user prompt
+- `GET /api/v1/plc-code/` - List generated PLC codes
+- `GET /api/v1/plc-code/{id}` - Get specific PLC code
+- `POST /api/v1/plc-code/{id}/validate` - Validate PLC code syntax
+- `POST /api/v1/plc-code/{id}/compile` - Compile PLC code
 
 ### Digital Twin Testing
 - `POST /api/v1/digital-twin/` - Create digital twin simulation
@@ -493,6 +493,12 @@ Below is a concise list of endpoints with request/response shapes and examples.
       "max_completion_tokens": 512
     }
     ```
+
+### Conversation System
+- POST /api/v1/conversations/ - Start a new conversation
+- GET /api/v1/conversations/ - List conversations
+- POST /api/v1/conversations/{id}/message - Send message to conversation
+- GET /api/v1/conversations/{id} - Get conversation details
   - Response JSON:
     ```json
     {
