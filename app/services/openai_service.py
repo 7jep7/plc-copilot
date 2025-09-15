@@ -86,7 +86,7 @@ class OpenAIService:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=request.temperature,
-                max_completion_tokens=request.max_tokens,
+                max_completion_tokens=request.max_completion_tokens or 2000,
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0
@@ -99,13 +99,10 @@ class OpenAIService:
             result = self._parse_generated_response(generated_content, request)
             
             # Add generation metadata
-            # Keep the original request value for backwards compatibility while
-            # also indicating the actual parameter passed to the API.
             result["generation_metadata"] = {
                 "model": "gpt-4-turbo-preview",
                 "temperature": request.temperature,
-                "max_tokens": request.max_tokens,
-                "max_completion_tokens": request.max_tokens,
+                "max_completion_tokens": request.max_completion_tokens or 2000,
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
@@ -314,7 +311,7 @@ END_PROGRAM
         self,
         request,
         retry_on_length: bool = True,
-        retry_max_completion_tokens: int = 512,
+        retry_max_completion_tokens: int = 2048,
         return_raw: bool = False,
     ) -> Tuple[str, dict]:
         """
@@ -331,14 +328,12 @@ END_PROGRAM
             return self._safe_chat_create(
                 model=model,
                 messages=[{"role": "user", "content": request.user_prompt}],
-                temperature=getattr(request, "temperature", 0.7),
+                temperature=getattr(request, "temperature", 1.0),
                 max_completion_tokens=max_tokens_val,
             )
 
         try:
-            initial_max = getattr(request, "max_tokens", None)
-            if initial_max is None:
-                initial_max = getattr(request, "max_completion_tokens", 512)
+            initial_max = request.max_completion_tokens or 512
 
             response = _call_with_max(initial_max)
 
@@ -348,7 +343,20 @@ END_PROGRAM
                     content_val = resp.choices[0].message.content
                 except Exception:
                     content_val = None
+                
                 usage_val = getattr(resp, "usage", None)
+                # Convert usage object to dictionary for JSON serialization
+                if usage_val is not None:
+                    try:
+                        if hasattr(usage_val, 'model_dump'):
+                            usage_val = usage_val.model_dump()
+                        elif hasattr(usage_val, 'dict'):
+                            usage_val = usage_val.dict()
+                        elif hasattr(usage_val, '__dict__'):
+                            usage_val = usage_val.__dict__
+                    except Exception:
+                        usage_val = None
+                        
                 return content_val, usage_val
 
             content, usage = _extract(response)
@@ -376,7 +384,7 @@ END_PROGRAM
                     msg = ch0.get("message") or {}
                     content_str = msg.get("content") if isinstance(msg, dict) else None
 
-                    if finish == "length" and (not content_str):
+                    if finish == "length" and (not content_str or len(content_str.strip()) < 10):
                         logger.warning(
                             "chat_completion truncated by max tokens; retrying with larger max",
                             initial_max=initial_max,

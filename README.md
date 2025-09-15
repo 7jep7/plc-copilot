@@ -489,8 +489,8 @@ Below is a concise list of endpoints with request/response shapes and examples.
     {
       "user_prompt": "string",
       "model": "string (optional, default: gpt-5-nano)",
-      "temperature": 0.7,
-      "max_tokens": 512
+      "temperature": 1.0,
+      "max_completion_tokens": 512
     }
     ```
   - Response JSON:
