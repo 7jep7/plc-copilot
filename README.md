@@ -110,6 +110,137 @@ celery -A app.worker worker --loglevel=info
 - `GET /health` - Health check endpoint
 - `GET /` - API information
 
+## 4-Stage User Flow
+
+The PLC Copilot follows a structured 4-stage conversation flow designed for efficiency and smooth user experience. Most time is spent in stages 2 and 4, while stages 1 and 3 are kept short to maintain momentum.
+
+### Stage 1: Initial User Prompt 🚀
+**Purpose**: Capture the user's initial automation idea or problem statement.
+
+**Duration**: Short (1-2 interactions)
+
+**UI Requirements**:
+- Simple, welcoming input field with placeholder: *"Describe what you want to automate..."*
+- Examples: "Automate a conveyor belt sorting system", "Control a packaging line", "Monitor temperature in a furnace"
+- **API Endpoint**: `POST /api/v1/ai/chat`
+- Quick acknowledgment and immediate transition to Stage 2
+
+**User Experience**:
+- Single text input to get started quickly
+- No complex forms or overwhelming questions
+- AI acknowledges the request and moves to requirements gathering
+
+### Stage 2: Requirement Definition 📋
+**Purpose**: Interactive Q&A to gather all necessary technical requirements and context.
+
+**Duration**: Medium (focused but thorough - aim for smooth progression)
+
+**UI Requirements**:
+- Conversational chat interface
+- Progress indicator showing requirement completion
+- **Force Transition Button**: "I'm ready to generate code" (user can skip remaining questions)
+- **Document Upload**: Option to upload equipment manuals or specifications
+- Smart question sequencing to avoid overwhelming the user
+- **API Endpoints**: 
+  - `POST /api/v1/ai/chat` (interactive Q&A)
+  - `POST /api/v1/documents/upload` (optional manual uploads)
+
+**AI Behavior**:
+- Ask focused, relevant questions based on initial prompt
+- Prioritize critical requirements first (safety, I/O, basic sequence)
+- Adapt questioning based on user responses
+- Provide option to proceed when minimum viable requirements are gathered
+
+**Example Question Flow**:
+- "What type of sensors will detect [specific items from initial prompt]?"
+- "How many [input/output] points do you expect?"
+- "Are there any safety requirements or emergency stops?"
+- "What PLC platform are you using, or do you need recommendations?"
+
+**Completion Criteria**:
+- Minimum viable requirements captured, OR
+- User manually forces transition to Stage 3
+
+### Stage 3: PLC Code Generation ⚡
+**Purpose**: Generate initial PLC code based on gathered requirements.
+
+**Duration**: Short (automated process with progress indication)
+
+**UI Requirements**:
+- Loading animation with progress indicators
+- Status messages: "Analyzing requirements...", "Generating ladder logic...", "Optimizing code..."
+- **API Endpoint**: `POST /api/v1/plc-code/generate`
+- Automatic transition to Stage 4 upon completion
+
+**Generated Outputs**:
+- Complete PLC program (ladder logic, structured text, etc.)
+- I/O configuration tables
+- Basic documentation and comments
+- Initial code structure ready for testing
+
+### Stage 4: Testing and Refinement �
+**Purpose**: Test code robustness and refine through chat interaction or manual edits.
+
+**Duration**: Extended (most time spent here - iterative improvement)
+
+**UI Requirements**:
+- **Split View**: Code editor + chat interface
+- **Manual Editing**: Full code editing capabilities with syntax highlighting
+- **Chat Refinement**: Continue conversation to request modifications
+- **Testing Integration**: 
+  - Digital twin simulation controls
+  - Validation and error checking
+  - Test scenario runners
+- **Export Options**: Download final code in various formats
+- **API Endpoints**:
+  - `POST /api/v1/ai/chat` (refinement discussions)
+  - `POST /api/v1/plc-code/{id}/validate` (code validation)
+  - `POST /api/v1/digital-twin/{id}/test` (simulation testing)
+  - Manual code updates via editor
+
+**Refinement Options**:
+1. **Chat-based**: "Add a safety timeout for conveyor motor", "Optimize the sorting logic"
+2. **Manual editing**: Direct code modifications with real-time validation
+3. **Testing feedback**: Run simulations and iterate based on results
+
+**Testing Features**:
+- Digital twin simulation with visual feedback
+- Automated robustness testing
+- Edge case scenario validation
+- Performance optimization suggestions
+
+### Conversation Management
+
+**Stage Transitions**:
+- **1→2**: Automatic after initial prompt
+- **2→3**: User-controlled ("Generate Code" button) or automatic when requirements complete
+- **3→4**: Automatic after code generation
+- **4→2**: Option to "Refine Requirements" (back to Stage 2)
+
+**State Persistence**:
+- Full conversation history maintained
+- Requirements and code versions tracked
+- Ability to revert to previous stages or code versions
+
+**API Integration**:
+- Primary conversation endpoint: `POST /api/v1/ai/chat` with stage context
+- Code management through dedicated PLC endpoints
+- Real-time validation and testing integration
+
+**User Control**:
+- Clear stage indicators (1→2→3→4)
+- Ability to force progression from Stage 2
+- Option to return to requirements if code needs major changes
+- Export functionality available throughout Stage 4
+- Conversation state managed server-side
+- Real-time validation and guidance at each stage
+
+**UI Flow Control**:
+- Clear stage progression indicators (1→2→3→4)
+- Stage completion validation before advancement
+- Ability to edit/refine previous stages
+- Final deliverable summary and export options
+
 ## Production Deployment
 
 ### Render.com (Recommended)
@@ -242,7 +373,7 @@ alembic downgrade -1
 
 ## Support
 
-For questions and support, please [create an issue](link-to-issues) or contact [your-email].
+For questions and support, please [create an issue](link-to-issues) or contact Jonas Petersen.
 
 ## OpenAI parameters: max_tokens vs max_completion_tokens
 
