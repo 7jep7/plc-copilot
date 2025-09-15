@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import documents, plc_code, digital_twin
+from app.api.api_v1.endpoints import documents, plc_code, digital_twin, ai, conversations
 
 api_router = APIRouter()
 
@@ -21,4 +21,18 @@ api_router.include_router(
     digital_twin.router, 
     prefix="/digital-twin", 
     tags=["digital-twin"]
+)
+
+# AI endpoints
+api_router.include_router(
+    ai.router,
+    prefix="/ai",
+    tags=["ai"]
+)
+
+# Conversation endpoints
+api_router.include_router(
+    conversations.router,
+    prefix="/conversations",
+    tags=["conversations"]
 )

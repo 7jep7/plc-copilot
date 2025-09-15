@@ -33,19 +33,11 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
-    
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
     
     # File Upload Configuration
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
-    ALLOWED_FILE_TYPES: List[str] = ["application/pdf"]
+    ALLOWED_FILE_TYPES: List[str] = ["application/pdf", "text/plain"]
     UPLOAD_DIR: str = "uploads"
     
     # Celery Configuration
@@ -55,7 +47,7 @@ class Settings(BaseSettings):
     # PLC Code Generation Settings
     DEFAULT_PLC_LANGUAGE: str = "structured_text"
     MAX_PROMPT_LENGTH: int = 4000
-    DEFAULT_TEMPERATURE: float = 0.7
+    DEFAULT_TEMPERATURE: float = 1.0
     
     class Config:
         case_sensitive = True

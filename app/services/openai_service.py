@@ -4,6 +4,7 @@ import openai
 import structlog
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
+import re
 
 from app.core.config import settings
 from app.models.document import Document
@@ -15,11 +16,42 @@ logger = structlog.get_logger()
 openai.api_key = settings.OPENAI_API_KEY
 
 
+class OpenAIParameterError(Exception):
+    """Raised when the OpenAI API reports an unsupported parameter or value.
+
+    Attributes:
+        param: the name of the offending parameter (if available)
+        message: original error message
+    """
+
+    def __init__(self, param: str | None, message: str):
+        super().__init__(message)
+        self.param = param
+        self.message = message
+
+
 class OpenAIService:
     """Service for OpenAI API integration."""
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+
+    def _safe_chat_create(self, **kwargs):
+        """Call chat.completions.create and raise OpenAIParameterError when the
+        API reports unsupported parameters or values.
+        """
+        try:
+            return self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            msg = str(e)
+            # Look for explicit unsupported parameter/value messages
+            m = re.search(r"Unsupported (?:parameter|value): '\\'([^\\']+)\\'", msg)
+            if not m:
+                m = re.search(r"Unsupported (?:parameter|value): '([^']+)'", msg)
+
+            param = m.group(1) if m else None
+            # Raise a structured error the API layer can handle
+            raise OpenAIParameterError(param=param, message=msg)
     
     async def generate_plc_code(
         self,
@@ -46,14 +78,15 @@ class OpenAIService:
             user_prompt = self._build_user_prompt(request, document_context)
             
             # Call OpenAI API
-            response = self.client.chat.completions.create(
+            # Note: newer OpenAI models expect `max_completion_tokens` instead of `max_tokens`.
+            response = self._safe_chat_create(
                 model="gpt-4-turbo-preview",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=request.temperature,
-                max_tokens=request.max_tokens,
+                max_completion_tokens=request.max_completion_tokens or 2000,
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0
@@ -69,7 +102,7 @@ class OpenAIService:
             result["generation_metadata"] = {
                 "model": "gpt-4-turbo-preview",
                 "temperature": request.temperature,
-                "max_tokens": request.max_tokens,
+                "max_completion_tokens": request.max_completion_tokens or 2000,
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
@@ -237,7 +270,7 @@ END_PROGRAM
             return {}
         
         try:
-            response = self.client.chat.completions.create(
+            response = self._safe_chat_create(
                 model="gpt-4-turbo-preview",
                 messages=[
                     {
@@ -261,7 +294,7 @@ END_PROGRAM
                     }
                 ],
                 temperature=0.3,
-                max_tokens=1500
+                max_completion_tokens=1500
             )
             
             content = response.choices[0].message.content
@@ -271,3 +304,106 @@ END_PROGRAM
         except Exception as e:
             logger.error("Document analysis failed", error=str(e))
             return {"error": str(e)}
+
+    from typing import Tuple
+
+    async def chat_completion(
+        self,
+        request,
+        retry_on_length: bool = True,
+        retry_max_completion_tokens: int = 2048,
+        return_raw: bool = False,
+    ) -> Tuple[str, dict]:
+        """
+        Simple chat wrapper that sends a single user prompt to the specified model and returns text + usage.
+
+        Features:
+        - Optionally retries once with a larger max_completion_tokens when the model
+          stops with finish_reason == 'length' and produced no visible content.
+        - Optionally returns the raw response as a third element when return_raw=True.
+        """
+        model = getattr(request, "model", "gpt-5-nano") or "gpt-5-nano"
+
+        def _call_with_max(max_tokens_val):
+            return self._safe_chat_create(
+                model=model,
+                messages=[{"role": "user", "content": request.user_prompt}],
+                temperature=getattr(request, "temperature", 1.0),
+                max_completion_tokens=max_tokens_val,
+            )
+
+        try:
+            initial_max = request.max_completion_tokens or 512
+
+            response = _call_with_max(initial_max)
+
+            # Helper to extract content and usage
+            def _extract(resp):
+                try:
+                    content_val = resp.choices[0].message.content
+                except Exception:
+                    content_val = None
+                
+                usage_val = getattr(resp, "usage", None)
+                # Convert usage object to dictionary for JSON serialization
+                if usage_val is not None:
+                    try:
+                        if hasattr(usage_val, 'model_dump'):
+                            usage_val = usage_val.model_dump()
+                        elif hasattr(usage_val, 'dict'):
+                            usage_val = usage_val.dict()
+                        elif hasattr(usage_val, '__dict__'):
+                            usage_val = usage_val.__dict__
+                    except Exception:
+                        usage_val = None
+                        
+                return content_val, usage_val
+
+            content, usage = _extract(response)
+
+            # Best-effort to inspect the raw response as a dict for decision logic
+            parsed_raw = None
+            try:
+                parsed_raw = response.to_dict()
+            except Exception:
+                try:
+                    parsed_raw = response.json()
+                except Exception:
+                    parsed_raw = None
+
+            # If the model finished due to length and produced no visible content, optionally retry
+            try:
+                if (
+                    retry_on_length
+                    and parsed_raw
+                    and parsed_raw.get("choices")
+                    and len(parsed_raw.get("choices")) > 0
+                ):
+                    ch0 = parsed_raw.get("choices")[0]
+                    finish = ch0.get("finish_reason")
+                    msg = ch0.get("message") or {}
+                    content_str = msg.get("content") if isinstance(msg, dict) else None
+
+                    if finish == "length" and (not content_str or len(content_str.strip()) < 10):
+                        logger.warning(
+                            "chat_completion truncated by max tokens; retrying with larger max",
+                            initial_max=initial_max,
+                            retry_max=retry_max_completion_tokens,
+                        )
+                        try:
+                            response = _call_with_max(retry_max_completion_tokens)
+                            content, usage = _extract(response)
+                        except Exception as e:
+                            logger.error("Retry after length truncation failed", error=str(e))
+            except Exception:
+                # Be defensive: don't let diagnostic logic break the normal flow
+                pass
+
+            if return_raw:
+                return content, usage, response
+
+            return content, usage
+
+        except Exception as e:
+            logger.error("chat_completion failed", error=str(e))
+            raise
