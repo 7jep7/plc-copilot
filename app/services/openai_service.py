@@ -313,21 +313,34 @@ END_PROGRAM
         retry_on_length: bool = True,
         retry_max_completion_tokens: int = 2048,
         return_raw: bool = False,
+        messages: Optional[List[Dict[str, str]]] = None,
     ) -> Tuple[str, dict]:
         """
-        Simple chat wrapper that sends a single user prompt to the specified model and returns text + usage.
+        Chat completion with support for both simple prompts and structured messages.
 
-        Features:
-        - Optionally retries once with a larger max_completion_tokens when the model
-          stops with finish_reason == 'length' and produced no visible content.
-        - Optionally returns the raw response as a third element when return_raw=True.
+        Args:
+            request: Request object with user_prompt, model, temperature, etc.
+            retry_on_length: Whether to retry with larger max_tokens if truncated
+            retry_max_completion_tokens: Max tokens for retry attempt
+            return_raw: Whether to return raw response as third element
+            messages: Optional list of messages [{"role": "system/user/assistant", "content": "..."}]
+                     If provided, overrides request.user_prompt
+
+        Returns:
+            Tuple of (content, usage) or (content, usage, raw_response) if return_raw=True
         """
         model = getattr(request, "model", "gpt-5-nano") or "gpt-5-nano"
 
         def _call_with_max(max_tokens_val):
+            # Use structured messages if provided, otherwise fall back to simple user prompt
+            if messages:
+                call_messages = messages
+            else:
+                call_messages = [{"role": "user", "content": request.user_prompt}]
+            
             return self._safe_chat_create(
                 model=model,
-                messages=[{"role": "user", "content": request.user_prompt}],
+                messages=call_messages,
                 temperature=getattr(request, "temperature", 1.0),
                 max_completion_tokens=max_tokens_val,
             )
@@ -401,9 +414,12 @@ END_PROGRAM
 
             if return_raw:
                 return content, usage, response
+            else:
+                return content, usage
 
-            return content, usage
-
+        except OpenAIParameterError:
+            # Re-raise parameter errors as-is
+            raise
         except Exception as e:
-            logger.error("chat_completion failed", error=str(e))
+            logger.error("OpenAI chat completion failed", error=str(e))
             raise

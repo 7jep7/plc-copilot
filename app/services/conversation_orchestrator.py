@@ -194,14 +194,18 @@ class ConversationOrchestrator:
         
         llm_request = LLMRequest(user_prompt, **model_config)
         
-        # Call OpenAI with system message
+        # Prepare structured messages for proper system/user separation
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # Call OpenAI with structured messages
         try:
-            # For now, combine system and user prompts
-            # TODO: Update OpenAI service to support system messages
-            combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-            llm_request.user_prompt = combined_prompt
-            
-            response_content, usage = await self.openai_service.chat_completion(llm_request)
+            response_content, usage = await self.openai_service.chat_completion(
+                llm_request, 
+                messages=messages
+            )
             
         except Exception as e:
             logger.error("LLM call failed", error=str(e))
