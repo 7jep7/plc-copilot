@@ -15,9 +15,10 @@ When deploying to Render.com, you need to manually set these environment variabl
 ### Memory Optimization
 
 The app is optimized for Render's free tier (512MB memory limit):
-- Uses single worker process (`-w 1`) instead of multiple workers
-- Extended timeout (`--timeout 120`) to handle AI model loading
-- Preload application (`--preload`) to reduce memory overhead
+- Uses single uvicorn process instead of multiple gunicorn workers
+- Lazy loading of heavy imports after startup
+- Minimal entry point (`minimal_main.py`) for production deployment
+- Extended timeout (120s) to handle AI model loading
 
 ### Deployment Steps
 

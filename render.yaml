@@ -2,9 +2,9 @@ services:
   - type: web
     name: plc-copilot-backend
     env: python
-    plan: starter
+    plan: free
     buildCommand: "./build.sh"
-    startCommand: "gunicorn -w 1 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:$PORT --timeout 120 --preload"
+    startCommand: "uvicorn minimal_main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120"
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
