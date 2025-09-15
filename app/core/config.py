@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./app.db"
     TEST_DATABASE_URL: Optional[str] = None
     
     # Redis
