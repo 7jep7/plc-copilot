@@ -271,3 +271,26 @@ END_PROGRAM
         except Exception as e:
             logger.error("Document analysis failed", error=str(e))
             return {"error": str(e)}
+
+    from typing import Tuple
+
+    async def chat_completion(self, request) -> Tuple[str, dict]:
+        """
+        Simple chat wrapper that sends a single user prompt to the specified model and returns text + usage.
+        """
+        model = getattr(request, "model", "gpt-5-nano") or "gpt-5-nano"
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": request.user_prompt}],
+                temperature=getattr(request, "temperature", 0.7),
+                max_tokens=getattr(request, "max_tokens", 512)
+            )
+
+            content = response.choices[0].message.content
+            usage = getattr(response, "usage", None)
+            return content, usage
+
+        except Exception as e:
+            logger.error("chat_completion failed", error=str(e))
+            raise
