@@ -23,7 +23,7 @@ def main():
 
     class Req:
         user_prompt = "Hello from test - please respond with the model name"
-        model = "gpt-5-nano"
+        model = "gpt-4o-mini"
         # Use default model-friendly temperature to avoid unsupported_value errors
         temperature = 1.0
         max_tokens = 64

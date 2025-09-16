@@ -8,14 +8,14 @@ This system implements a robust, modular architecture for multi-stage conversati
 
 ### 1. Conversation Stages (`app/schemas/conversation.py`)
 
-- **REQUIREMENTS_GATHERING**: Initial user query analysis and requirement identification
-- **QA_CLARIFICATION**: Technical Q&A to fill information gaps
+- **PROJECT_KICKOFF**: Initial user query analysis and requirement identification
+- **GATHER_REQUIREMENTS**: Technical Q&A to fill information gaps (supports MCQ format)
 - **CODE_GENERATION**: Structured Text (ST) PLC code generation
 - **REFINEMENT_TESTING**: Code refinement, testing, and optimization
 
 ### 2. Stage Detection Service (`app/services/stage_detection_service.py`)
 
-- Uses lightweight LLM (gpt-5-nano) for low-latency stage classification
+- Uses lightweight LLM (gpt-4o-mini) for low-latency stage classification
 - Analyzes conversation context to suggest appropriate stage transitions
 - Validates transitions using predefined rules
 - Returns confidence scores and reasoning
@@ -24,8 +24,8 @@ This system implements a robust, modular architecture for multi-stage conversati
 
 **Modular, stage-specific prompt templates:**
 
-- `RequirementsGatheringTemplate`: Systematic requirement analysis
-- `QAClarificationTemplate`: Technical interview approach
+- `ProjectKickoffTemplate`: Initial user query analysis and project setup
+- `GatherRequirementsTemplate`: Technical Q&A with MCQ support
 - `CodeGenerationTemplate`: Production-ready ST code generation
 - `RefinementTestingTemplate`: Code review and improvement
 
@@ -112,7 +112,7 @@ class CustomGenerationTemplate(PromptTemplate):
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 0.1,
             "max_completion_tokens": 2048
         }
@@ -133,10 +133,10 @@ DATABASE_URL=postgresql://user:pass@localhost/plc_copilot
 ### Model Configuration
 
 Default model settings per stage:
-- **Stage Detection**: gpt-5-nano (fast, low-cost)
-- **Requirements**: gpt-4 (temperature=0.3)
-- **Code Generation**: gpt-4 (temperature=0.2)
-- **Refinement**: gpt-4 (temperature=0.1)
+- **Stage Detection**: gpt-4o-mini (fast, low-cost)
+- **Requirements**: gpt-4o-mini (temperature=0.3)
+- **Code Generation**: gpt-4o (temperature=0.2)
+- **Refinement**: gpt-4o-mini (temperature=0.1)
 
 ## Testing
 
@@ -194,7 +194,7 @@ Change models per stage in template `get_model_config()` methods:
 ```python
 def get_model_config(self) -> Dict[str, Any]:
     return {
-        "model": "gpt-4-turbo",  # or "claude-3", "gpt-5"
+        "model": "gpt-4o",  # or "gpt-4o-mini" for lighter workloads
         "temperature": 0.2,
         "max_completion_tokens": 1024
     }

@@ -38,7 +38,7 @@ Content-Type: application/json
 
 {
   "user_prompt": "Your question about PLC programming",
-  "model": "gpt-5-nano",
+  "model": "gpt-4o-mini",
   "temperature": 1.0,
   "max_tokens": 512
 }
@@ -66,9 +66,9 @@ Content-Type: application/json
 ```json
 {
   "conversation_id": "uuid-string",
-  "stage": "requirements_gathering",
+  "stage": "project_kickoff",
   "response": "AI response text",
-  "next_stage": "qa_clarification",
+  "next_stage": "gather_requirements",
   "stage_progress": {"requirements_identified": 0, "confidence": 0.0},
   "suggested_actions": ["Provide more details...", "Upload documentation..."],
   "metadata": {}
@@ -112,7 +112,7 @@ Content-Type: application/json
 
 {
   "conversation_id": "string",
-  "target_stage": "qa_clarification",
+  "target_stage": "gather_requirements",
   "reason": "Manual override",
   "force": false
 }
@@ -122,7 +122,7 @@ Content-Type: application/json
 
 #### Reset Conversation
 ```http
-POST /api/v1/conversations/{conversation_id}/reset?target_stage=requirements_gathering
+POST /api/v1/conversations/{conversation_id}/reset?target_stage=project_kickoff
 ```
 
 **Status**: ✅ Working
@@ -348,8 +348,8 @@ PYTHONPATH=/path/to/plc-copilot python -m uvicorn app.main:app --host 0.0.0.0 --
 
 #### Multi-Stage Conversation Flow
 The conversation system supports these stages:
-- `requirements_gathering`: Initial user input and requirements extraction
-- `qa_clarification`: Follow-up questions and clarifications
+- `project_kickoff`: Initial user input and project analysis
+- `gather_requirements`: Follow-up questions and clarifications (MCQ support)
 - `code_generation`: PLC code generation based on requirements
 - `refinement_testing`: Code refinement and testing feedback
 - `completed`: Final stage

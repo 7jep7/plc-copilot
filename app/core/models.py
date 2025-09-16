@@ -1,45 +1,58 @@
 """Centralized model configuration for PLC-Copilot."""
 
+import os
 from typing import Dict, Any
 
 
 class ModelConfig:
     """Centralized configuration for AI models used throughout the application."""
     
-    # Model names as constants
-    DOCUMENT_ANALYSIS_MODEL = "gpt-4o"  # For extracting info from parsed PDFs
-    CONVERSATION_MODEL = "gpt-4o-mini"  # For everything else (conversations, stage detection, etc.)
+    # Environment-based model selection for cost optimization
+    _is_testing = os.getenv("TESTING", "false").lower() == "true"
+    _is_dev = os.getenv("ENVIRONMENT", "production") == "development"
     
-    # Model configurations for different use cases
+    # Model names as constants - optimized for cost
+    # Use cheaper models in testing/dev, premium models in production
+    if _is_testing:
+        DOCUMENT_ANALYSIS_MODEL = "gpt-4o-mini"  # Use cheaper model for tests
+        CONVERSATION_MODEL = "gpt-4o-mini"
+    elif _is_dev:
+        DOCUMENT_ANALYSIS_MODEL = "gpt-4o-mini"  # Use cheaper model for dev
+        CONVERSATION_MODEL = "gpt-4o-mini"
+    else:
+        DOCUMENT_ANALYSIS_MODEL = "gpt-4o"  # For extracting info from parsed PDFs
+        CONVERSATION_MODEL = "gpt-4o-mini"  # For everything else (conversations, stage detection, etc.)
+    
+    # Model configurations for different use cases - optimized token limits
     DOCUMENT_ANALYSIS_CONFIG = {
         "model": DOCUMENT_ANALYSIS_MODEL,
         "temperature": 0.3,
-        "max_completion_tokens": 1500
+        "max_completion_tokens": 1000 if _is_testing else 1500  # Reduce tokens in testing
     }
     
     CONVERSATION_CONFIG = {
         "model": CONVERSATION_MODEL,
         "temperature": 1.0,
-        "max_completion_tokens": 1024
+        "max_completion_tokens": 512 if _is_testing else 1024  # Reduce tokens in testing
     }
     
     STAGE_DETECTION_CONFIG = {
         "model": CONVERSATION_MODEL,
         "temperature": 1.0,
-        "max_tokens": 200,
-        "max_completion_tokens": 200
+        "max_tokens": 100 if _is_testing else 200,  # Significantly reduce for testing
+        "max_completion_tokens": 100 if _is_testing else 200
     }
     
     CODE_GENERATION_CONFIG = {
         "model": CONVERSATION_MODEL,
         "temperature": 1.0,
-        "max_completion_tokens": 2048
+        "max_completion_tokens": 1024 if _is_testing else 2048  # Reduce tokens in testing
     }
     
     REFINEMENT_CONFIG = {
         "model": CONVERSATION_MODEL,
         "temperature": 1.0,
-        "max_completion_tokens": 1536
+        "max_completion_tokens": 768 if _is_testing else 1536  # Reduce tokens in testing
     }
     
     @classmethod
