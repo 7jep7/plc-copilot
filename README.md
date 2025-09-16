@@ -1205,6 +1205,31 @@ This backend provides a complete foundation for PLC automation workflows:
 3. **Test with provided examples** and Swagger UI at `/docs`
 4. **Extend prompt templates** for domain-specific requirements
 
+## Future Optimizations
+
+### 💰 OpenAI API Cost Reduction
+
+The current implementation sends full conversation context with every API call, which provides excellent context awareness but can be expensive at scale. Future optimizations include:
+
+**📉 Token Usage Reduction:**
+- **Truncate History**: Send only recent or relevant messages to reduce token usage
+- **Summarize Context**: Use API to summarize past conversation, replacing long history with a concise summary
+- **Use System Messages**: Define chatbot role in system message to avoid repeating in every request
+- **Monitor Tokens**: Track usage with tools like `tiktoken` and optimize input to stay cost-efficient
+
+**🎯 Smart Context Management:**
+- **Stage-Specific Context**: Only send relevant context for current conversation stage
+- **Document Context Caching**: Cache processed document summaries to avoid reprocessing
+- **Incremental Updates**: Track context changes and send only deltas when possible
+- **Context Compression**: Compress older conversation turns into concise summaries
+
+**💡 Implementation Priority:**
+1. **Message Window Reduction** (easy win: 60-80% token reduction)
+2. **Stage-Specific Context Filtering** (medium complexity, high impact)
+3. **OpenAI Assistants API Integration** (complex but enables persistent conversation threads)
+
+Current cost: ~1,000-6,000 tokens per interaction. Target: ~300-1,500 tokens per interaction.
+
 ## Dependencies
 
 ### Technology Stack
