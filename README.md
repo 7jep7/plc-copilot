@@ -377,6 +377,56 @@ plc-copilot/
 - **Monitoring**: Sentry for error tracking (optional)
 - **Deployment**: Render.com with Gunicorn + Uvicorn workers
 
+## Document Processing Pipeline
+
+### Multi-Method PDF Text Extraction
+
+The system uses **3 complementary extraction libraries** with intelligent fallback:
+
+| Method | Advantages | Best For |
+|--------|-----------|-----------|
+| **pdfplumber** | Excellent table extraction, preserves positioning | Technical datasheets, specifications |
+| **PyMuPDF (fitz)** | Fast processing, good with graphics/images | Mixed content documents |
+| **PyPDF2** | Lightweight, wide compatibility | Simple text documents, fallback |
+
+### Smart Processing Strategy
+
+```python
+# Page-level deduplication prevents redundant processing
+page_texts = {}  # Track successfully extracted pages
+for page_num in range(doc.page_count):
+    if page_num in page_texts:
+        continue  # Skip already extracted pages
+```
+
+**Process Flow:**
+1. **pdfplumber** processes all pages first
+2. **PyMuPDF** handles failed pages
+3. **PyPDF2** processes remaining failures
+4. **Assemble in page order** for final output
+
+### LLM-Based Content Analysis
+
+**Single-pass processing** using **GPT-4-turbo-preview**:
+- **Temperature 0.3** for consistent technical analysis
+- **8KB content limit** per document for cost efficiency
+- **Structured extraction** of PLC-relevant specifications
+
+**Extracted Information:**
+- I/O specifications (digital/analog inputs/outputs)
+- Control logic requirements and safety systems
+- Operating parameters and communication protocols
+- Timing requirements and performance criteria
+
+### Future Enhancements
+
+**Planned Improvements:**
+- **OCR integration** for scanned PDFs and image-based content
+- **Smart context re-injection** when initial analysis seems incomplete
+- **Chunked analysis** for large documents with section-wise processing
+- **Image/diagram extraction** using GPT-4-Vision for circuit diagrams
+- **Multi-language support** for German/Japanese technical documentation
+
 ## Development
 
 ### Code Quality

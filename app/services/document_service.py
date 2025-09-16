@@ -200,29 +200,31 @@ class DocumentService:
         except Exception as e:
             logger.warning("pdfplumber extraction failed", error=str(e))
         
-        try:
-            # Method 2: PyMuPDF (good for complex layouts)
-            doc = fitz.open(file_path)
-            for page_num in range(doc.page_count):
-                page = doc[page_num]
-                text = page.get_text()
-                if text and text not in text_content:
-                    text_content.append(text)
-            doc.close()
-        except Exception as e:
-            logger.warning("PyMuPDF extraction failed", error=str(e))
+        # Only try further methods if pdfplumber did not extract any text
+        if not text_content:
+            try:
+                # Method 2: PyMuPDF (good for complex layouts)
+                doc = fitz.open(file_path)
+                for page_num in range(doc.page_count):
+                    page = doc[page_num]
+                    text = page.get_text()
+                    if text:
+                        text_content.append(text)
+                doc.close()
+            except Exception as e:
+                logger.warning("PyMuPDF extraction failed", error=str(e))
         
-        try:
-            # Method 3: PyPDF2 (fallback)
-            if not text_content:
+        if not text_content:
+            try:
+                # Method 3: PyPDF2 (fallback)
                 with open(file_path, 'rb') as file:
                     pdf_reader = PyPDF2.PdfReader(file)
                     for page in pdf_reader.pages:
                         text = page.extract_text()
                         if text:
                             text_content.append(text)
-        except Exception as e:
-            logger.warning("PyPDF2 extraction failed", error=str(e))
+            except Exception as e:
+                logger.warning("PyPDF2 extraction failed", error=str(e))
         
         return "\n\n".join(text_content)
     

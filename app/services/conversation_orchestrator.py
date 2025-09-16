@@ -194,11 +194,19 @@ class ConversationOrchestrator:
         
         llm_request = LLMRequest(user_prompt, **model_config)
         
-        # Prepare structured messages for proper system/user separation
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # Prepare structured messages with full conversation history
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add recent conversation history for context (last 10 messages)
+        recent_messages = conversation.messages[-10:]  # Limit to avoid token overflow
+        for msg in recent_messages[:-1]:  # Exclude the current message we just added
+            messages.append({
+                "role": msg.role.value,
+                "content": msg.content
+            })
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_prompt})
         
         # Call OpenAI with structured messages
         try:
