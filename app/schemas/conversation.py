@@ -8,8 +8,8 @@ from datetime import datetime
 
 class ConversationStage(str, Enum):
     """Stages of a PLC-Copilot conversation."""
-    REQUIREMENTS_GATHERING = "requirements_gathering"
-    QA_CLARIFICATION = "qa_clarification"
+    PROJECT_KICKOFF = "project_kickoff"
+    GATHER_REQUIREMENTS = "gather_requirements"
     CODE_GENERATION = "code_generation"
     REFINEMENT_TESTING = "refinement_testing"
     COMPLETED = "completed"

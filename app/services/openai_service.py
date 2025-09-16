@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import re
 
 from app.core.config import settings
+from app.core.models import ModelConfig
 from app.models.document import Document
 from app.schemas.plc_code import PLCGenerationRequest
 
@@ -80,7 +81,7 @@ class OpenAIService:
             # Call OpenAI API
             # Note: newer OpenAI models expect `max_completion_tokens` instead of `max_tokens`.
             response = self._safe_chat_create(
-                model="gpt-4o",
+                model=ModelConfig.CONVERSATION_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -100,7 +101,7 @@ class OpenAIService:
             
             # Add generation metadata
             result["generation_metadata"] = {
-                "model": "gpt-4o",
+                "model": ModelConfig.CONVERSATION_MODEL,
                 "temperature": request.temperature,
                 "max_completion_tokens": request.max_completion_tokens or 2000,
                 "prompt_tokens": response.usage.prompt_tokens,
@@ -271,7 +272,7 @@ END_PROGRAM
         
         try:
             response = self._safe_chat_create(
-                model="gpt-4o",
+                model=ModelConfig.DOCUMENT_ANALYSIS_MODEL,
                 messages=[
                     {
                         "role": "system",
@@ -299,7 +300,7 @@ END_PROGRAM
             
             content = response.choices[0].message.content
             # In a production system, you'd want to parse this more carefully
-            return {"analysis": content, "model_used": "gpt-4o"}
+            return {"analysis": content, "model_used": ModelConfig.DOCUMENT_ANALYSIS_MODEL}
             
         except Exception as e:
             logger.error("Document analysis failed", error=str(e))
@@ -329,7 +330,7 @@ END_PROGRAM
         Returns:
             Tuple of (content, usage) or (content, usage, raw_response) if return_raw=True
         """
-        model = getattr(request, "model", "gpt-4o-mini") or "gpt-4o-mini"
+        model = getattr(request, "model", ModelConfig.CONVERSATION_MODEL) or ModelConfig.CONVERSATION_MODEL
 
         def _call_with_max(max_tokens_val):
             # Use structured messages if provided, otherwise fall back to simple user prompt

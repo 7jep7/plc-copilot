@@ -10,6 +10,7 @@ from app.schemas.conversation import (
     MessageRole
 )
 from app.services.openai_service import OpenAIService
+from app.core.models import ModelConfig
 
 logger = structlog.get_logger()
 
@@ -33,10 +34,10 @@ class StageDetectionService:
             # Create a lightweight request for stage detection
             class DetectionRequest:
                 user_prompt = context
-                model = "gpt-4o-mini"  # Fast, lightweight model
-                temperature = 1.0  # Use default temperature that all models support
-                max_tokens = 200
-                max_completion_tokens = 200
+                model = ModelConfig.CONVERSATION_MODEL
+                temperature = ModelConfig.STAGE_DETECTION_CONFIG["temperature"]
+                max_tokens = ModelConfig.STAGE_DETECTION_CONFIG["max_tokens"]
+                max_completion_tokens = ModelConfig.STAGE_DETECTION_CONFIG["max_completion_tokens"]
             
             # Get stage classification from LLM
             response_content, usage = await self.openai_service.chat_completion(DetectionRequest())
@@ -81,8 +82,8 @@ class StageDetectionService:
 CURRENT STAGE: {request.current_stage}
 
 CONVERSATION STAGES:
-1. requirements_gathering - Initial user query, identifying what's needed for PLC programming
-2. qa_clarification - Asking questions to clarify missing requirements, specifications, I/O, etc.
+1. project_kickoff - Initial user query, identifying what's needed for PLC programming
+2. gather_requirements - Asking questions to clarify missing requirements, specifications, I/O, etc.
 3. code_generation - Generating the actual Structured Text (ST) PLC code
 4. refinement_testing - User feedback, code modifications, testing, debugging
 
@@ -170,17 +171,17 @@ class StageTransitionRules:
     """Rules for valid stage transitions."""
     
     VALID_TRANSITIONS = {
-        ConversationStage.REQUIREMENTS_GATHERING: [
-            ConversationStage.QA_CLARIFICATION,
+        ConversationStage.PROJECT_KICKOFF: [
+            ConversationStage.GATHER_REQUIREMENTS,
             ConversationStage.CODE_GENERATION  # If requirements are complete
         ],
-        ConversationStage.QA_CLARIFICATION: [
-            ConversationStage.REQUIREMENTS_GATHERING,  # Back to requirements if major gaps
+        ConversationStage.GATHER_REQUIREMENTS: [
+            ConversationStage.PROJECT_KICKOFF,  # Back to requirements if major gaps
             ConversationStage.CODE_GENERATION,
-            ConversationStage.QA_CLARIFICATION  # Stay for more Q&A
+            ConversationStage.GATHER_REQUIREMENTS  # Stay for more Q&A
         ],
         ConversationStage.CODE_GENERATION: [
-            ConversationStage.QA_CLARIFICATION,  # If more info needed
+            ConversationStage.GATHER_REQUIREMENTS,  # If more info needed
             ConversationStage.REFINEMENT_TESTING,
             ConversationStage.COMPLETED
         ],
@@ -190,7 +191,7 @@ class StageTransitionRules:
             ConversationStage.COMPLETED
         ],
         ConversationStage.COMPLETED: [
-            ConversationStage.REQUIREMENTS_GATHERING  # New project
+            ConversationStage.PROJECT_KICKOFF  # New project
         ]
     }
     

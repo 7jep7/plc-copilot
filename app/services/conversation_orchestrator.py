@@ -101,7 +101,7 @@ class ConversationOrchestrator:
         new_id = conversation_id or str(uuid.uuid4())
         conversation = ConversationState(
             conversation_id=new_id,
-            current_stage=ConversationStage.REQUIREMENTS_GATHERING,
+            current_stage=ConversationStage.PROJECT_KICKOFF,
             requirements=RequirementsState(user_query=""),
             qa=QAState(),
             generation=GenerationState(),
@@ -154,9 +154,9 @@ class ConversationOrchestrator:
         conversation.current_stage = new_stage
         
         # Initialize stage-specific state if needed
-        if new_stage == ConversationStage.REQUIREMENTS_GATHERING and not conversation.requirements:
+        if new_stage == ConversationStage.PROJECT_KICKOFF and not conversation.requirements:
             conversation.requirements = RequirementsState(user_query="")
-        elif new_stage == ConversationStage.QA_CLARIFICATION and not conversation.qa:
+        elif new_stage == ConversationStage.GATHER_REQUIREMENTS and not conversation.qa:
             conversation.qa = QAState()
         elif new_stage == ConversationStage.CODE_GENERATION and not conversation.generation:
             conversation.generation = GenerationState()
@@ -240,13 +240,13 @@ class ConversationOrchestrator:
         
         stage = conversation.current_stage
         
-        if stage == ConversationStage.REQUIREMENTS_GATHERING:
+        if stage == ConversationStage.PROJECT_KICKOFF:
             if not conversation.requirements:
                 conversation.requirements = RequirementsState(user_query=user_message)
             else:
                 conversation.requirements.user_query = user_message
         
-        elif stage == ConversationStage.QA_CLARIFICATION:
+        elif stage == ConversationStage.GATHER_REQUIREMENTS:
             if not conversation.qa:
                 conversation.qa = QAState()
             
@@ -281,15 +281,15 @@ class ConversationOrchestrator:
         valid_transitions = StageTransitionRules.get_valid_transitions(current_stage)
         
         # Simple heuristics for stage progression
-        if current_stage == ConversationStage.REQUIREMENTS_GATHERING:
+        if current_stage == ConversationStage.PROJECT_KICKOFF:
             # Check if we have enough requirements
             if (conversation.requirements and 
                 len(conversation.requirements.identified_requirements) > 2):
                 return ConversationStage.CODE_GENERATION
             else:
-                return ConversationStage.QA_CLARIFICATION
+                return ConversationStage.GATHER_REQUIREMENTS
         
-        elif current_stage == ConversationStage.QA_CLARIFICATION:
+        elif current_stage == ConversationStage.GATHER_REQUIREMENTS:
             # Check if Q&A seems complete
             if (conversation.qa and 
                 len(conversation.qa.answers_received) >= 3):
@@ -309,13 +309,13 @@ class ConversationOrchestrator:
         
         stage = conversation.current_stage
         
-        if stage == ConversationStage.REQUIREMENTS_GATHERING:
+        if stage == ConversationStage.PROJECT_KICKOFF:
             return {
                 "requirements_identified": len(conversation.requirements.identified_requirements) if conversation.requirements else 0,
                 "confidence": conversation.requirements.confidence_level if conversation.requirements else 0.0
             }
         
-        elif stage == ConversationStage.QA_CLARIFICATION:
+        elif stage == ConversationStage.GATHER_REQUIREMENTS:
             return {
                 "questions_asked": len(conversation.qa.questions_asked) if conversation.qa else 0,
                 "answers_received": len(conversation.qa.answers_received) if conversation.qa else 0
@@ -338,14 +338,14 @@ class ConversationOrchestrator:
         
         stage = conversation.current_stage
         
-        if stage == ConversationStage.REQUIREMENTS_GATHERING:
+        if stage == ConversationStage.PROJECT_KICKOFF:
             return [
                 "Provide more details about your control requirements",
                 "Upload relevant documentation or datasheets",
                 "Specify safety requirements and constraints"
             ]
         
-        elif stage == ConversationStage.QA_CLARIFICATION:
+        elif stage == ConversationStage.GATHER_REQUIREMENTS:
             return [
                 "Answer the technical questions provided",
                 "Provide specific values and ranges",

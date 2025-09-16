@@ -128,19 +128,19 @@ async def reset_conversation(conversation_id: str, target_stage: Optional[Conver
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    reset_stage = target_stage or ConversationStage.REQUIREMENTS_GATHERING
+    reset_stage = target_stage or ConversationStage.PROJECT_KICKOFF
     
     try:
         # Reset to target stage
         await orchestrator._transition_to_stage(conversation, reset_stage)
         
         # Clear stage-specific state
-        if reset_stage == ConversationStage.REQUIREMENTS_GATHERING:
+        if reset_stage == ConversationStage.PROJECT_KICKOFF:
             conversation.requirements = None
             conversation.qa = None
             conversation.generation = None
             conversation.refinement = None
-        elif reset_stage == ConversationStage.QA_CLARIFICATION:
+        elif reset_stage == ConversationStage.GATHER_REQUIREMENTS:
             conversation.qa = None
             conversation.generation = None
             conversation.refinement = None

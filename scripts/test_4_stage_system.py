@@ -15,9 +15,9 @@ class StageTestSuite:
         self.orchestrator = ConversationOrchestrator()
         self.test_results = []
     
-    async def test_stage_1_requirements_gathering(self):
-        """Test requirements gathering stage functionality."""
-        print("\n🔍 TESTING STAGE 1: REQUIREMENTS GATHERING")
+    async def test_stage_1_project_kickoff(self):
+        """Test project kickoff stage functionality."""
+        print("\n🔍 TESTING STAGE 1: PROJECT KICKOFF")
         print("=" * 60)
         
         # Test 1: Simple requirement
@@ -30,7 +30,7 @@ class StageTestSuite:
         conv_id = response.conversation_id
         
         # Verify stage and response quality
-        assert response.stage == ConversationStage.REQUIREMENTS_GATHERING or response.stage == ConversationStage.QA_CLARIFICATION
+        assert response.stage == ConversationStage.PROJECT_KICKOFF or response.stage == ConversationStage.GATHER_REQUIREMENTS
         assert len(response.response) > 100  # Should provide substantial response
         print(f"✅ Stage: {response.stage}")
         print(f"✅ Response length: {len(response.response)} chars")
@@ -44,34 +44,43 @@ class StageTestSuite:
         
         response2 = await self.orchestrator.process_message(request2)
         
-        # Should still be in requirements or move to QA
-        assert response2.stage in [ConversationStage.REQUIREMENTS_GATHERING, ConversationStage.QA_CLARIFICATION]
+        # Should still be in project kickoff or move to requirements gathering
+        assert response2.stage in [ConversationStage.PROJECT_KICKOFF, ConversationStage.GATHER_REQUIREMENTS]
         print(f"✅ Stage transition handling: {response2.stage}")
         
         self.test_results.append({
-            "stage": "requirements_gathering",
+            "stage": "project_kickoff",
             "tests_passed": 2,
             "issues": []
         })
         return conv_id
     
-    async def test_stage_2_qa_clarification(self, conv_id: str):
-        """Test Q&A clarification stage functionality."""
-        print("\n❓ TESTING STAGE 2: Q&A CLARIFICATION")
+    async def test_stage_2_gather_requirements(self, conv_id: str):
+        """Test requirements gathering stage functionality."""
+        print("\n❓ TESTING STAGE 2: GATHER REQUIREMENTS")
         print("=" * 60)
         
-        # Force into QA stage if not already there
+        # Force into requirements gathering stage if not already there
         request = ConversationRequest(
             conversation_id=conv_id,
             message="Can you ask me some clarifying questions about the system requirements?",
-            force_stage=ConversationStage.QA_CLARIFICATION
+            force_stage=ConversationStage.GATHER_REQUIREMENTS
         )
         
         response = await self.orchestrator.process_message(request)
         
         # Verify stage
-        assert response.stage == ConversationStage.QA_CLARIFICATION
+        assert response.stage == ConversationStage.GATHER_REQUIREMENTS
         print(f"✅ Forced stage transition: {response.stage}")
+        
+        # Check for MCQ format in response
+        mcq_indicators = ["A)", "B)", "C)", "**Options**", "**Question**"]
+        has_mcq = any(indicator in response.response for indicator in mcq_indicators)
+        
+        if has_mcq:
+            print("✅ MCQ format detected in response")
+        else:
+            print("⚠️  No MCQ format detected - might be using open questions")
         
         # Test answering questions
         print("\n📝 Test 2.1: Answering clarification questions")
@@ -82,14 +91,14 @@ class StageTestSuite:
         
         answer_response = await self.orchestrator.process_message(answer_request)
         
-        # Should continue in QA or move to generation
-        assert answer_response.stage in [ConversationStage.QA_CLARIFICATION, ConversationStage.CODE_GENERATION]
+        # Should continue in gather requirements or move to generation
+        assert answer_response.stage in [ConversationStage.GATHER_REQUIREMENTS, ConversationStage.CODE_GENERATION]
         print(f"✅ Answer processing: {answer_response.stage}")
         
         self.test_results.append({
-            "stage": "qa_clarification", 
+            "stage": "gather_requirements", 
             "tests_passed": 2,
-            "issues": []
+            "issues": [] if has_mcq else ["No MCQ format detected in response"]
         })
         return conv_id
     
@@ -206,8 +215,8 @@ class StageTestSuite:
         
         try:
             # Test each stage sequentially
-            conv_id = await self.test_stage_1_requirements_gathering()
-            conv_id = await self.test_stage_2_qa_clarification(conv_id)
+            conv_id = await self.test_stage_1_project_kickoff()
+            conv_id = await self.test_stage_2_gather_requirements(conv_id)
             conv_id = await self.test_stage_3_code_generation(conv_id) 
             conv_id = await self.test_stage_4_refinement_testing(conv_id)
             
