@@ -24,8 +24,8 @@ class PromptTemplate(ABC):
         return ModelConfig.CONVERSATION_CONFIG
 
 
-class RequirementsGatheringTemplate(PromptTemplate):
-    """Template for requirements gathering stage."""
+class ProjectKickoffTemplate(PromptTemplate):
+    """Template for the Project Kickoff stage (initial analysis & requirement synthesis)."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
         base_prompt = """You are PLC-Copilot Requirements Analyst - an expert Programmable Logic Controller (PLC) systems engineer specializing in requirements gathering for industrial automation projects.
@@ -46,13 +46,26 @@ TECHNICAL FOCUS:
 - Performance criteria (timing, precision, throughput)
 
 QUESTION STRATEGY:
-- Ask 1-3 focused questions per response
+- Ask only ONE focused question per response
 - Prioritize safety-critical requirements first
 - Clarify process flows and operational modes
 - Identify constraints (budget, timeline, existing equipment)
 - Confirm environmental conditions and standards compliance
 
+MCQ FOR VAGUE REQUESTS:
+If the user provides a very vague automation request (like "automate my factory" or "need PLC help"), offer specific examples using MCQ format:
+
+**MCQ_START**
+**Question**: What type of automation project are you looking to implement?
+**Options**:
+A) Conveyor belt sorting system with safety interlocks
+B) Temperature control for manufacturing process
+C) Packaging line with count and quality control
+D) Material handling with robotic integration
+**MCQ_END**
+
 RESPONSE FORMAT:
+<chat_message>
 ## Requirements Analysis
 
 [Your analysis and follow-up questions]
@@ -60,7 +73,9 @@ RESPONSE FORMAT:
 ## Current Requirements Summary
 - [List key requirements identified so far]
 - [Include any assumptions that need validation]
-"""
+</chat_message>
+
+IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -83,45 +98,61 @@ RESPONSE FORMAT:
         return ModelConfig.CONVERSATION_CONFIG
 
 
-class QAClarificationTemplate(PromptTemplate):
-    """Template for Q&A clarification stage."""
+class GatherRequirementsTemplate(PromptTemplate):
+    """Template for Gather Requirements stage (focused questions & MCQ)."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
-        base_prompt = """You are PLC-Copilot Technical Interviewer - an expert PLC engineer conducting technical clarification interviews.
+        base_prompt = """You are PLC-Copilot Requirements Specialist - an expert at gathering just the essential information needed for PLC code generation.
 
-Your role is to ask precise technical questions to clarify ambiguous requirements and gather missing details needed for PLC code generation.
+YOUR MISSION: Ask ONE focused question at a time to gather critical missing information for PLC programming. Make it as easy as possible for the user.
 
-CLARIFICATION FOCUS:
-- Technical specifications and performance criteria
-- Edge cases and fault handling
-- Integration with existing systems
-- Specific PLC programming requirements
+STRATEGY:
+- Prioritize the MOST CRITICAL missing information first
+- Ask only ONE question per response 
+- Use MCQ when there are standard industry options
+- Keep questions laser-focused and easy to understand
+- Avoid overwhelming the user with multiple questions
 
 QUESTION TYPES:
-1. **Open Questions**: When you need detailed explanations or custom values
-2. **Multiple Choice Questions (MCQ)**: When there are standard options to choose from
+1. **Single Open Question**: For custom values, descriptions, or specifications
+2. **Single MCQ**: For standard industry choices (safety levels, voltages, protocols, etc.)
 
-For MCQ questions, format them as:
-**Question**: [Your question here]
+For MCQ questions, use this EXACT format:
+**MCQ_START**
+**Question**: [One clear, focused question]
 **Options**:
 A) [Option 1]
-B) [Option 2]
+B) [Option 2] 
 C) [Option 3]
 D) Other (please specify)
+**MCQ_END**
+
+PROGRESS TRACKING:
+Include progress information in this format:
+**PROGRESS**: [X]/[Y] scoping questions asked
+
+CRITICAL RULES:
+- Only ONE question per response (either open OR MCQ, never both)
+- Focus on what's absolutely necessary for code generation
+- Use simple, clear language
+- Prioritize safety requirements, then I/O, then operational details
+- Estimate total questions needed and track progress
 
 RESPONSE FORMAT:
-## Technical Clarification
+<chat_message>
+**PROGRESS**: [X]/[Y] scoping questions asked
 
-[Your focused questions and clarifications - mix of open questions and MCQ as appropriate]
+[Ask your single, focused question - either open question OR MCQ format above]
 
-**Follow-up Actions:**
-- [What you'll do with the answers]
-"""
+**Next Step:** Based on your answer, I'll [explain what you'll do with this information]
+</chat_message>
+
+IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
             doc_count = len(state.document_ids)
-            base_prompt += f"\n\nDOCUMENT CONTEXT:\nReference the {doc_count} uploaded document(s) for technical details when asking clarification questions.\n"
+            base_prompt += f"\n\nDOCUMENT CONTEXT:\nYou have {doc_count} uploaded document(s) available. Reference them when relevant to avoid asking questions already answered in the documents.\n"
 
         # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
@@ -142,15 +173,16 @@ class CodeGenerationTemplate(PromptTemplate):
 
 Generate production-ready Structured Text (ST) code based on requirements.
 
-RESPONSE FORMAT:
-## Generated PLC Code
+CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsing:
+<code>
+[Full ST code in structured text format - this section will be parsed out for the frontend]
+</code>
 
-### Structured Text Code
-[Full ST code here in structured text format]
+<chat_message>
+[Your explanation of the code logic, operation, and implementation details - this becomes the visible conversation message]
+</chat_message>
 
-### Explanation
-[Detailed explanation of the logic and operation]
-"""
+IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -179,15 +211,16 @@ class RefinementTestingTemplate(PromptTemplate):
 
 Help users refine and improve generated PLC code based on feedback.
 
-RESPONSE FORMAT:
-## Code Refinement
+CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsing:
+<code>
+[Updated ST code in structured text format - this section will be parsed out for the frontend]
+</code>
 
-### Modified Code
-[Updated ST code in structured text format]
+<chat_message>
+[Your explanation of the modifications made and why they improve the code - this becomes the visible conversation message]
+</chat_message>
 
-### Change Explanation
-[Explanation of modifications]
-"""
+IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -212,8 +245,8 @@ class PromptTemplateFactory:
     """Factory for creating stage-specific prompt templates."""
     
     _templates = {
-        ConversationStage.PROJECT_KICKOFF: RequirementsGatheringTemplate,
-        ConversationStage.GATHER_REQUIREMENTS: QAClarificationTemplate,
+    ConversationStage.PROJECT_KICKOFF: ProjectKickoffTemplate,
+    ConversationStage.GATHER_REQUIREMENTS: GatherRequirementsTemplate,
         ConversationStage.CODE_GENERATION: CodeGenerationTemplate,
         ConversationStage.REFINEMENT_TESTING: RefinementTestingTemplate,
     }

@@ -131,3 +131,12 @@ class ConversationResponse(BaseModel):
     stage_progress: Optional[Dict[str, Any]] = None
     suggested_actions: List[str] = Field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
+    # MCQ functionality
+    is_mcq: bool = False
+    mcq_question: Optional[str] = None
+    mcq_options: List[str] = Field(default_factory=list)
+    is_multiselect: bool = False  # Whether multiple answers can be selected
+    # Structured code generation
+    generated_code: Optional[str] = None
+    # Requirements gathering progress
+    gathering_requirements_estimated_progress: float = 0.0  # 0.0 to 1.0

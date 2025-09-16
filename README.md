@@ -171,7 +171,7 @@ celery -A app.worker worker --loglevel=info
 
 The PLC Copilot follows a structured 4-stage conversation flow designed for efficiency and smooth user experience. Most time is spent in stages 2 and 4, while stages 1 and 3 are kept short to maintain momentum.
 
-### Stage 1: Initial User Prompt 🚀
+### Stage 1: Project Kickoff 🚀
 **Purpose**: Capture the user's initial automation idea or problem statement.
 
 **Duration**: Short (1-2 interactions)
@@ -188,7 +188,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - No complex forms or overwhelming questions
 - AI acknowledges the request and moves to requirements gathering
 
-### Stage 2: Requirement Definition 📋
+### Stage 2: Gather Requirements 📋
 **Purpose**: Interactive Q&A to gather all necessary technical requirements and context.
 
 **Duration**: Medium (focused but thorough - aim for smooth progression)
@@ -205,6 +205,11 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 
 **AI Behavior**:
 - Ask focused, relevant questions based on initial prompt
+- **Single-Question Focus**: Each response contains exactly one focused question to prevent user overload
+- **MCQ Support**: Provides structured multiple-choice questions for standardized options (safety features, voltages, protocols, etc.)
+  - Structured API fields: `is_mcq`, `mcq_question`, `mcq_options`
+  - Frontend should use ONLY MCQ fields for user interaction when `is_mcq` is true
+  - Clean, focused UI without competing text or overwhelming choices
 - Prioritize critical requirements first (safety, I/O, basic sequence)
 - Adapt questioning based on user responses
 - Provide option to proceed when minimum viable requirements are gathered
@@ -219,7 +224,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - Minimum viable requirements captured, OR
 - User manually forces transition to Stage 3
 
-### Stage 3: PLC Code Generation ⚡
+### Stage 3: Code Generation ⚡
 **Purpose**: Generate initial PLC code based on gathered requirements.
 
 **Duration**: Short (automated process with progress indication)
@@ -236,7 +241,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - Basic documentation and comments
 - Initial code structure ready for testing
 
-### Stage 4: Testing and Refinement �
+### Stage 4: Refinement & Testing 🔧
 **Purpose**: Test code robustness and refine through chat interaction or manual edits.
 
 **Duration**: Extended (most time spent here - iterative improvement)
@@ -896,12 +901,46 @@ Content-Type: application/json
   "stage": "project_kickoff",
   "response": "I'll help you design a conveyor belt control system...",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.0,
   "stage_progress": { "requirements_identified": 2, "confidence": 0.7 },
   "suggested_actions": [
     "Provide conveyor speed requirements",
     "Specify safety sensor types"
-  ]
+  ],
+  "is_mcq": false,
+  "mcq_question": null,
+  "mcq_options": [],
+  "is_multiselect": false,
+  "generated_code": null
 }
+```
+
+**MCQ Response Example (gather_requirements stage):**
+```json
+{
+  "conversation_id": "uuid-string",
+  "stage": "gather_requirements",
+  "response": "What safety features do you require for your conveyor system?",
+  "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.6,
+  "suggested_actions": ["Select your required safety features"],
+  "is_mcq": true,
+  "mcq_question": "What safety features do you require for your conveyor system?",
+  "mcq_options": [
+    "Emergency stop buttons only",
+    "Light curtains for perimeter protection",
+    "Safety mats for operator zones",
+    "Comprehensive safety package (all features)"
+  ],
+  "is_multiselect": false,
+  "generated_code": null
+}
+```
+
+**Critical Frontend MCQ Handling:**
+- When `is_mcq` is true, display ONLY `mcq_question` and `mcq_options` to user
+- Avoid displaying full `response` text alongside MCQ to prevent cognitive overload
+- Provide clean, focused interface for user selection
 ```
 
 #### Get Conversation State
@@ -957,6 +996,10 @@ Content-Type: application/json
 ```
 
 ## Frontend Integration
+
+For comprehensive frontend integration details, including MCQ handling, stage management, and best practices, see the **[Frontend Integration Guide](./FRONTEND_INTEGRATION_GUIDE.md)**.
+
+### Quick Integration Summary
 
 ### 📋 Frontend Integration Guide
 
@@ -1030,10 +1073,10 @@ async function transitionStage(conversationId: string, targetStage: string) {
 // Stage indicators
 const StageIndicator = ({ currentStage }: { currentStage: string }) => {
   const stages = [
-    { key: 'project_kickoff', label: 'Kickoff', icon: '�' },
-    { key: 'gather_requirements', label: 'Requirements', icon: '📝' },
-    { key: 'code_generation', label: 'Generation', icon: '⚙️' },
-    { key: 'refinement_testing', label: 'Testing & Refinement', icon: '🔧' }
+    { key: 'project_kickoff', label: 'Project Kickoff', icon: '�' },
+    { key: 'gather_requirements', label: 'Gather Requirements', icon: '📝' },
+    { key: 'code_generation', label: 'Code Generation', icon: '⚙️' },
+    { key: 'refinement_testing', label: 'Refinement & Testing', icon: '🔧' }
   ];
   
   return (
@@ -1167,6 +1210,31 @@ This backend provides a complete foundation for PLC automation workflows:
 2. **Use conversation endpoints** for full workflow features
 3. **Test with provided examples** and Swagger UI at `/docs`
 4. **Extend prompt templates** for domain-specific requirements
+
+## Future Optimizations
+
+### 💰 OpenAI API Cost Reduction
+
+The current implementation sends full conversation context with every API call, which provides excellent context awareness but can be expensive at scale. Future optimizations include:
+
+**📉 Token Usage Reduction:**
+- **Truncate History**: Send only recent or relevant messages to reduce token usage
+- **Summarize Context**: Use API to summarize past conversation, replacing long history with a concise summary
+- **Use System Messages**: Define chatbot role in system message to avoid repeating in every request
+- **Monitor Tokens**: Track usage with tools like `tiktoken` and optimize input to stay cost-efficient
+
+**🎯 Smart Context Management:**
+- **Stage-Specific Context**: Only send relevant context for current conversation stage
+- **Document Context Caching**: Cache processed document summaries to avoid reprocessing
+- **Incremental Updates**: Track context changes and send only deltas when possible
+- **Context Compression**: Compress older conversation turns into concise summaries
+
+**💡 Implementation Priority:**
+1. **Message Window Reduction** (easy win: 60-80% token reduction)
+2. **Stage-Specific Context Filtering** (medium complexity, high impact)
+3. **OpenAI Assistants API Integration** (complex but enables persistent conversation threads)
+
+Current cost: ~1,000-6,000 tokens per interaction. Target: ~300-1,500 tokens per interaction.
 
 ## Dependencies
 

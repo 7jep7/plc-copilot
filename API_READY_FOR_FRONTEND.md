@@ -69,8 +69,14 @@ Content-Type: application/json
   "stage": "project_kickoff",
   "response": "AI response text",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.0,
   "stage_progress": {"requirements_identified": 0, "confidence": 0.0},
   "suggested_actions": ["Provide more details...", "Upload documentation..."],
+  "is_mcq": false,
+  "mcq_question": null,
+  "mcq_options": [],
+  "is_multiselect": false,
+  "generated_code": null,
   "metadata": {}
 }
 ```
