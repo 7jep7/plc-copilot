@@ -35,5 +35,5 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Command to run the application
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "app.main:app"]
+# Command to run the application - single worker for free tier
+CMD ["uvicorn", "minimal_main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120"]
