@@ -33,7 +33,7 @@ class StageDetectionService:
             # Create a lightweight request for stage detection
             class DetectionRequest:
                 user_prompt = context
-                model = "gpt-5-mini"  # Fast, lightweight model
+                model = "gpt-4o-mini"  # Fast, lightweight model
                 temperature = 1.0  # Use default temperature that all models support
                 max_tokens = 200
                 max_completion_tokens = 200

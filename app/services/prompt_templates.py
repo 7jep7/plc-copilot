@@ -21,7 +21,7 @@ class PromptTemplate(ABC):
     def get_model_config(self) -> Dict[str, Any]:
         """Get model configuration for this stage."""
         return {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 1.0,
             "max_completion_tokens": 1024
         }
@@ -84,7 +84,7 @@ RESPONSE FORMAT:
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 1.0,
             "max_completion_tokens": 1024
         }
@@ -161,7 +161,7 @@ RESPONSE FORMAT:
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 1.0,
             "max_completion_tokens": 2048
         }
@@ -202,7 +202,7 @@ RESPONSE FORMAT:
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 1.0,
             "max_completion_tokens": 1536
         }

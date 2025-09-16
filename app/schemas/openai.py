@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, Union
 
 class ChatRequest(BaseModel):
     user_prompt: str
-    model: Optional[str] = "gpt-5-nano"
+    model: Optional[str] = "gpt-4o-mini"
     temperature: float = 1.0
     max_completion_tokens: Optional[int] = Field(
         default=512, 
