@@ -9,17 +9,20 @@ Create the copilot for Programmable Logic Controllers. Automate automating. Prog
 ## Features
 
 ### MVP Functionality
-1. **PDF Document Parsing**: Upload industrial device manuals and extract critical information relevant for PLC code
-2. **AI-Powered PLC Code Generation**: Convert user prompts and manual context into structured text (PLC code) using OpenAI models
-3. **Digital Twin Testing**: Simple simulation functionality to test structured text (PLC code) for robustness
+1. **Multi-Stage Conversation System**: Guided 4-stage workflow from requirements to code refinement
+2. **PDF Document Parsing**: Upload industrial device manuals and extract critical information relevant for PLC code
+3. **AI-Powered PLC Code Generation**: Convert user prompts and manual context into structured text (PLC code) using OpenAI models
+4. **Digital Twin Testing**: Simple simulation functionality to test structured text (PLC code) for robustness
 
 ### Technical Features
-- RESTful API endpoints with OpenAPI documentation
-- Production-ready deployment on Render.com
-- Structured logging and health monitoring
-- Database migrations with Alembic
-- Background task processing with Celery
-- Comprehensive error handling and validation
+- **RESTful API**: Two-tier approach with conversation workflows and simple chat endpoints
+- **Stage-Aware Prompts**: Specialized AI prompts for each conversation stage
+- **Server-Side State Management**: Full conversation tracking and stage transitions
+- **Production-ready deployment** on Render.com
+- **Structured logging** and health monitoring
+- **Database migrations** with Alembic
+- **Background task processing** with Celery
+- **Comprehensive error handling** and validation
 
 ## Quick Start
 
@@ -122,7 +125,8 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 **UI Requirements**:
 - Simple, welcoming input field with placeholder: *"Describe what you want to automate..."*
 - Examples: "Automate a conveyor belt sorting system", "Control a packaging line", "Monitor temperature in a furnace"
-- **API Endpoint**: `POST /api/v1/ai/chat`
+- **Primary API**: `POST /api/v1/conversations/` (start new conversation)
+- **Alternative API**: `POST /api/v1/ai/chat` (simple stateless chat)
 - Quick acknowledgment and immediate transition to Stage 2
 
 **User Experience**:
@@ -141,9 +145,9 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - **Force Transition Button**: "I'm ready to generate code" (user can skip remaining questions)
 - **Document Upload**: Option to upload equipment manuals or specifications
 - Smart question sequencing to avoid overwhelming the user
-- **API Endpoints**: 
-  - `POST /api/v1/ai/chat` (interactive Q&A)
-  - `POST /api/v1/documents/upload` (optional manual uploads)
+- **Primary API**: `POST /api/v1/conversations/` (continue conversation)
+- **Stage Control**: `POST /api/v1/conversations/{id}/stage` (force transitions)
+- **Document Upload**: `POST /api/v1/documents/upload` (optional manual uploads)
 
 **AI Behavior**:
 - Ask focused, relevant questions based on initial prompt
@@ -193,7 +197,8 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
   - Test scenario runners
 - **Export Options**: Download final code in various formats
 - **API Endpoints**:
-  - `POST /api/v1/ai/chat` (refinement discussions)
+  - `POST /api/v1/conversations/` (primary refinement discussions)
+  - `POST /api/v1/ai/chat` (alternative simple chat)
   - `POST /api/v1/plc-code/{id}/validate` (code validation)
   - `POST /api/v1/digital-twin/{id}/test` (simulation testing)
   - Manual code updates via editor
@@ -211,35 +216,82 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 
 ### Conversation Management
 
+PLC Copilot provides two API approaches for different use cases:
+
+#### Primary API: Multi-Stage Conversation System
+**Recommended for production frontends**
+
+Use `POST /api/v1/conversations/` for the full stage-aware workflow:
+
+```typescript
+// Start new conversation
+const response = await fetch('/api/v1/conversations/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    message: "I need to control a conveyor belt system with safety stops"
+  })
+});
+
+const conversation = await response.json();
+// Returns: { conversation_id, stage, response, suggested_actions, stage_progress }
+```
+
+**Stage Management**:
+- Server tracks conversation state and current stage
+- Automatic stage detection based on conversation context
+- Manual stage control via `POST /api/v1/conversations/{id}/stage`
+- Stage-specific prompts automatically selected
+- Full conversation history and state persistence
+
 **Stage Transitions**:
-- **1→2**: Automatic after initial prompt
-- **2→3**: User-controlled ("Generate Code" button) or automatic when requirements complete
+- **1→2**: Automatic when initial requirements need clarification
+- **2→3**: Automatic when requirements are sufficient, or user forces via "Generate Code"
 - **3→4**: Automatic after code generation
-- **4→2**: Option to "Refine Requirements" (back to Stage 2)
+- **4→2**: Manual via "Refine Requirements" or stage transition API
 
-**State Persistence**:
-- Full conversation history maintained
-- Requirements and code versions tracked
-- Ability to revert to previous stages or code versions
+**Frontend Integration**:
+```typescript
+// Continue conversation with stage awareness
+const response = await fetch('/api/v1/conversations/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    conversation_id: "existing-conversation-id",
+    message: "Add emergency stop functionality"
+  })
+});
 
-**API Integration**:
-- Primary conversation endpoint: `POST /api/v1/ai/chat` with stage context
-- Code management through dedicated PLC endpoints
-- Real-time validation and testing integration
+// Get stage suggestions and progress
+const suggestions = await fetch(`/api/v1/conversations/${conversationId}/stage/suggestions`);
+```
 
-**User Control**:
-- Clear stage indicators (1→2→3→4)
-- Ability to force progression from Stage 2
-- Option to return to requirements if code needs major changes
-- Export functionality available throughout Stage 4
+#### Alternative API: Simple Chat
+**For ad-hoc queries or testing**
+
+Use `POST /api/v1/ai/chat` for simple, stateless interactions:
+
+```typescript
+const response = await fetch('/api/v1/ai/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_prompt: "Explain PLC ladder logic basics",
+    model: "gpt-4",
+    temperature: 0.7
+  })
+});
+```
+
+**When to use each API**:
+- **Conversations API**: Multi-stage PLC development workflows, state tracking, iterative refinement
+- **Chat API**: Quick questions, documentation, general PLC knowledge queries
+
+**State Management**:
 - Conversation state managed server-side
-- Real-time validation and guidance at each stage
-
-**UI Flow Control**:
-- Clear stage progression indicators (1→2→3→4)
-- Stage completion validation before advancement
-- Ability to edit/refine previous stages
-- Final deliverable summary and export options
+- Full message history and stage context preserved
+- Requirements, generated code, and refinements tracked
+- Export and version control throughout the workflow
 
 ## Production Deployment
 
@@ -324,6 +376,56 @@ plc-copilot/
 - **Logging**: Structured logging with structlog
 - **Monitoring**: Sentry for error tracking (optional)
 - **Deployment**: Render.com with Gunicorn + Uvicorn workers
+
+## Document Processing Pipeline
+
+### Multi-Method PDF Text Extraction
+
+The system uses **3 complementary extraction libraries** with intelligent fallback:
+
+| Method | Advantages | Best For |
+|--------|-----------|-----------|
+| **pdfplumber** | Excellent table extraction, preserves positioning | Technical datasheets, specifications |
+| **PyMuPDF (fitz)** | Fast processing, good with graphics/images | Mixed content documents |
+| **PyPDF2** | Lightweight, wide compatibility | Simple text documents, fallback |
+
+### Smart Processing Strategy
+
+```python
+# Page-level deduplication prevents redundant processing
+page_texts = {}  # Track successfully extracted pages
+for page_num in range(doc.page_count):
+    if page_num in page_texts:
+        continue  # Skip already extracted pages
+```
+
+**Process Flow:**
+1. **pdfplumber** processes all pages first
+2. **PyMuPDF** handles failed pages
+3. **PyPDF2** processes remaining failures
+4. **Assemble in page order** for final output
+
+### LLM-Based Content Analysis
+
+**Single-pass processing** using **GPT-4-turbo-preview**:
+- **Temperature 0.3** for consistent technical analysis
+- **8KB content limit** per document for cost efficiency
+- **Structured extraction** of PLC-relevant specifications
+
+**Extracted Information:**
+- I/O specifications (digital/analog inputs/outputs)
+- Control logic requirements and safety systems
+- Operating parameters and communication protocols
+- Timing requirements and performance criteria
+
+### Future Enhancements
+
+**Planned Improvements:**
+- **OCR integration** for scanned PDFs and image-based content
+- **Smart context re-injection** when initial analysis seems incomplete
+- **Chunked analysis** for large documents with section-wise processing
+- **Image/diagram extraction** using GPT-4-Vision for circuit diagrams
+- **Multi-language support** for German/Japanese technical documentation
 
 ## Development
 
@@ -612,25 +714,227 @@ This project exposes a versioned REST API with OpenAPI documentation automatical
 
 Below is a concise list of endpoints with request/response shapes and examples.
 
-### AI Chat
-- POST /api/v1/ai/chat
-  - Description: Send a user prompt to an LLM and receive a text response.
-  - Request JSON:
-    ```json
-    {
-      "user_prompt": "string",
-      "model": "string (optional, default: gpt-5-nano)",
-      "temperature": 1.0,
-      "max_completion_tokens": 512
-    }
-    ```
+### 🚀 Primary API: Multi-Stage Conversations
+**Recommended for production frontend integration**
 
-### Conversation System
-- POST /api/v1/conversations/ - Start a new conversation
-- GET /api/v1/conversations/ - List conversations
-- POST /api/v1/conversations/{id}/message - Send message to conversation
-- GET /api/v1/conversations/{id} - Get conversation details
-  - Response JSON:
+#### Start/Continue Conversation
+```http
+POST /api/v1/conversations/
+Content-Type: application/json
+
+{
+  "conversation_id": "optional-existing-id",
+  "message": "I need to control a conveyor belt with emergency stops",
+  "force_stage": "requirements_gathering" // optional override
+}
+```
+
+**Response:**
+```json
+{
+  "conversation_id": "uuid-string",
+  "stage": "requirements_gathering",
+  "response": "I'll help you design a conveyor belt control system...",
+  "next_stage": "qa_clarification",
+  "stage_progress": { "requirements_identified": 2, "confidence": 0.7 },
+  "suggested_actions": [
+    "Provide conveyor speed requirements",
+    "Specify safety sensor types"
+  ]
+}
+```
+
+#### Get Conversation State
+```http
+GET /api/v1/conversations/{conversation_id}
+```
+
+#### Manual Stage Transitions
+```http
+POST /api/v1/conversations/{conversation_id}/stage
+Content-Type: application/json
+
+{
+  "target_stage": "code_generation",
+  "force": true
+}
+```
+
+#### Stage Suggestions & Progress
+```http
+GET /api/v1/conversations/{conversation_id}/stage/suggestions
+```
+
+**Returns:** Valid transitions, suggested next stage, progress metrics
+
+### 🔧 Alternative API: Simple Chat
+**For ad-hoc queries and testing**
+
+#### Simple AI Chat
+```http
+POST /api/v1/ai/chat
+Content-Type: application/json
+
+{
+  "user_prompt": "Explain PLC ladder logic basics",
+  "model": "gpt-4",
+  "temperature": 0.7,
+  "max_completion_tokens": 512
+}
+```
+
+**Response:**
+```json
+{
+  "model": "gpt-4",
+  "content": "PLC ladder logic is a programming language...",
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 128,
+    "total_tokens": 143
+  }
+}
+```
+
+### 📋 Frontend Integration Guide
+
+#### Recommended Workflow for React/Vue/Angular
+
+```typescript
+// 1. Initialize conversation state
+interface ConversationState {
+  conversationId: string | null;
+  currentStage: string;
+  messages: Array<{role: string, content: string, timestamp: string}>;
+  suggestedActions: string[];
+  stageProgress: Record<string, any>;
+}
+
+// 2. Start conversation
+async function startConversation(initialMessage: string): Promise<ConversationState> {
+  const response = await fetch('/api/v1/conversations/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: initialMessage })
+  });
+  
+  const data = await response.json();
+  return {
+    conversationId: data.conversation_id,
+    currentStage: data.stage,
+    messages: [
+      { role: 'user', content: initialMessage, timestamp: new Date().toISOString() },
+      { role: 'assistant', content: data.response, timestamp: new Date().toISOString() }
+    ],
+    suggestedActions: data.suggested_actions || [],
+    stageProgress: data.stage_progress || {}
+  };
+}
+
+// 3. Continue conversation
+async function continueConversation(
+  conversationId: string, 
+  message: string,
+  forceStage?: string
+): Promise<ConversationState> {
+  const response = await fetch('/api/v1/conversations/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      conversation_id: conversationId,
+      message,
+      force_stage: forceStage
+    })
+  });
+  
+  const data = await response.json();
+  // Update your state accordingly
+  return data;
+}
+
+// 4. Force stage transition (optional)
+async function transitionStage(conversationId: string, targetStage: string) {
+  await fetch(`/api/v1/conversations/${conversationId}/stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_stage: targetStage })
+  });
+}
+```
+
+#### Stage-Specific UI Components
+
+```typescript
+// Stage indicators
+const StageIndicator = ({ currentStage }: { currentStage: string }) => {
+  const stages = [
+    { key: 'requirements_gathering', label: 'Requirements', icon: '📝' },
+    { key: 'qa_clarification', label: 'Clarification', icon: '❓' },
+    { key: 'code_generation', label: 'Generation', icon: '⚙️' },
+    { key: 'refinement_testing', label: 'Refinement', icon: '🔧' }
+  ];
+  
+  return (
+    <div className="stage-indicator">
+      {stages.map((stage, index) => (
+        <div 
+          key={stage.key}
+          className={`stage ${currentStage === stage.key ? 'active' : ''}`}
+        >
+          {stage.icon} {stage.label}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Suggested actions
+const SuggestedActions = ({ actions, onAction }: { 
+  actions: string[], 
+  onAction: (action: string) => void 
+}) => (
+  <div className="suggested-actions">
+    <h4>Suggested Next Steps:</h4>
+    {actions.map((action, index) => (
+      <button 
+        key={index}
+        onClick={() => onAction(action)}
+        className="action-button"
+      >
+        {action}
+      </button>
+    ))}
+  </div>
+);
+```
+
+#### Error Handling
+
+```typescript
+// Robust error handling
+async function apiCall(url: string, options: RequestInit) {
+  try {
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      
+      if (response.status === 400 && errorData.detail) {
+        // Handle structured API errors (e.g., OpenAI parameter errors)
+        throw new Error(`API Error: ${errorData.detail.message || errorData.detail}`);
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('API call failed:', error);
+    throw error;
+  }
+}
+```
+```
     ```json
     {
       "model": "gpt-5-nano",
@@ -665,25 +969,39 @@ Notes on authentication and security:
 - The backend currently expects trusted clients or deployment-level protection. Add an API authentication layer (JWT or API keys) for production.
 - Do not store secrets in client-side code or public repositories. Use `.env` or platform secrets (Render, Docker secrets, etc.).
 
-Advanced: OpenAPI and client SDKs
-- FastAPI automatically generates an OpenAPI JSON at `/openapi.json`. Use it to generate client SDKs (e.g., via OpenAPI Generator or `openapi-python-client`).
+## SDK Generation
 
-Example to generate a Python client:
+FastAPI automatically generates an OpenAPI JSON at `/openapi.json`. Use it to generate client SDKs for any language:
+
+**Python Client:**
 ```bash
 pip install openapi-python-client
 openapi-python-client generate --url http://localhost:8000/openapi.json
 ```
 
-Example to generate TypeScript client using OpenAPI Generator (requires Java):
+**TypeScript Client:**
 ```bash
 openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o ./frontend-client
 ```
 
----
+## Next Steps
 
-If you'd like, I can:
-- Add a README subsection that includes a minimal JavaScript client wrapper for the AI endpoints.
-- Add CORS configuration examples and secure auth (JWT/API key).
-- Add a GitHub Actions workflow to run tests and build OpenAPI clients on push.
+This backend provides a complete foundation for PLC automation workflows:
 
-Which of these would you like me to add next?
+- ✅ **Multi-stage conversation system** for guided PLC development
+- ✅ **Stage-aware AI prompts** for technical accuracy
+- ✅ **Flexible API design** supporting both workflows and ad-hoc queries
+- ✅ **Production-ready deployment** with comprehensive error handling
+- ✅ **Frontend integration examples** with TypeScript patterns
+
+**For Production:**
+1. **Deploy to Render.com** using included `render.yaml` configuration
+2. **Add Supabase persistence** for conversation state (beyond MVP)
+3. **Implement authentication** (JWT/API keys) for security
+4. **Scale workers** based on usage patterns
+
+**For Development:**
+1. **Follow frontend integration guide** in the API documentation section
+2. **Use conversation endpoints** for full workflow features
+3. **Test with provided examples** and Swagger UI at `/docs`
+4. **Extend prompt templates** for domain-specific requirements

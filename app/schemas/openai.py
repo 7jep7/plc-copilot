@@ -12,6 +12,14 @@ class ChatRequest(BaseModel):
         example=512,
         ge=1  # Ensure it's at least 1 if provided
     )
+    stage: Optional[str] = Field(
+        default=None,
+        description="Optional conversation stage for stage-specific prompts (requirements_gathering, qa_clarification, code_generation, refinement_testing)"
+    )
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Optional conversation ID to include conversation context in the request"
+    )
 
 
 class ChatResponse(BaseModel):

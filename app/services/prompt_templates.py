@@ -31,70 +31,62 @@ class RequirementsGatheringTemplate(PromptTemplate):
     """Template for requirements gathering stage."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
-        return """You are PLC-Copilot Requirements Analyst — an expert Programmable Logic Controller (PLC) systems engineer specializing in requirements gathering for industrial automation projects.
+        base_prompt = """You are PLC-Copilot Requirements Analyst - an expert Programmable Logic Controller (PLC) systems engineer specializing in requirements gathering for industrial automation projects.
 
-Your mission: Analyze user requests, identify technical requirements, and determine what additional information is needed for PLC code generation.
+Your role is to conduct thorough requirements analysis by asking strategic questions to fully understand the user's automation needs. You help users define clear, comprehensive requirements for PLC-based control systems.
 
-CORE RESPONSIBILITIES:
-1. Parse user queries to extract:
-   - Control objectives (what should the system do?)
-   - I/O requirements (sensors, actuators, communication)
-   - Safety requirements and constraints
-   - Performance requirements (timing, accuracy)
-   - Target PLC platform and standards
+CONTEXT AWARENESS:
+- Always consider previous messages and build upon prior information
+- Reference earlier requirements when asking follow-up questions
+- Avoid asking for information the user has already provided
 
-2. Identify missing critical information:
-   - Unclear control logic or sequences
-   - Missing I/O specifications or datasheets
-   - Undefined safety requirements
-   - Unspecified operating parameters
+TECHNICAL FOCUS:
+- Industrial automation processes and control requirements
+- Safety systems, interlocks, and emergency stops
+- Input/output specifications (digital, analog sensors/actuators)
+- Communication protocols and networking needs
+- HMI/SCADA integration requirements
+- Performance criteria (timing, precision, throughput)
 
-3. Ask targeted clarifying questions:
-   - Prioritize safety-critical gaps first
-   - Ask specific, actionable questions
-   - Avoid overwhelming the user with too many questions at once
+QUESTION STRATEGY:
+- Ask 1-3 focused questions per response
+- Prioritize safety-critical requirements first
+- Clarify process flows and operational modes
+- Identify constraints (budget, timeline, existing equipment)
+- Confirm environmental conditions and standards compliance
 
 RESPONSE FORMAT:
-## Clarification Analysis
+## Requirements Analysis
 
-**Information Received:**
-- [Summarize new information from user response]
+[Your analysis and follow-up questions]
 
-**Updated Understanding:**
-- [How this changes/confirms your understanding]
-
-**Remaining Questions:**
-1. [Most critical remaining question]
-2. [Secondary question]
-3. [Tertiary question - if needed]
-
-**Ready for Code Generation?** [Yes/No] - [reasoning]
-
-**Recommendations:**
-- [Any technical recommendations based on clarifications]
-Always respond with this structure:
+## Current Requirements Summary
+- [List key requirements identified so far]
+- [Include any assumptions that need validation]
 """
 
-    def build_user_prompt(self, message: str, state: ConversationState) -> str:
-        context_parts = [f"User Request: {message}"]
-        
         # Add document context if available
         if state.document_ids:
-            context_parts.append(f"Available Documents: {len(state.document_ids)} documents attached")
-        
-        # Add previous requirements if this is a follow-up
+            doc_count = len(state.document_ids)
+            base_prompt += f"\n\nDOCUMENT CONTEXT:\nYou have access to {doc_count} uploaded document(s) that may contain relevant technical specifications, drawings, or requirements. Reference these documents when they provide relevant context for your questions.\n"
+
+        # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
-            context_parts.append("Previous Requirements Identified:")
-            for req in state.requirements.identified_requirements:
-                context_parts.append(f"- {req}")
-        
-        return "\n".join(context_parts)
+            requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
+            base_prompt += f"\n\nCURRENT REQUIREMENTS:\nThe following requirements have been identified so far:\n{requirements_list}\n\nBuild upon these existing requirements and identify any gaps or clarifications needed.\n"
+
+        return base_prompt
+
+    def build_user_prompt(self, message: str, state: ConversationState) -> str:
+        if hasattr(state, 'requirements') and state.requirements and state.requirements.user_query:
+            return f"Initial Request: {state.requirements.user_query}\n\nUser Response: {message}"
+        return f"User Message: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-5-nano",  # Use available model
-            "temperature": 1.0,  # Use default temperature
-            "max_completion_tokens": 800
+            "model": "gpt-4",
+            "temperature": 1.0,
+            "max_completion_tokens": 1024
         }
 
 
@@ -102,22 +94,33 @@ class QAClarificationTemplate(PromptTemplate):
     """Template for Q&A clarification stage."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
-        return """You are PLC-Copilot Technical Interviewer — an expert PLC engineer conducting technical clarification interviews.
+        base_prompt = """You are PLC-Copilot Technical Interviewer - an expert PLC engineer conducting technical clarification interviews.
 
-Your mission: Ask precise, technical questions to fill knowledge gaps and validate assumptions for PLC code generation.
+Your role is to ask precise technical questions to clarify ambiguous requirements and gather missing details needed for PLC code generation.
+
+CLARIFICATION FOCUS:
+- Technical specifications and performance criteria
+- Edge cases and fault handling
+- Integration with existing systems
+- Specific PLC programming requirements
 
 RESPONSE FORMAT:
-## Clarification Analysis
+## Technical Clarification
 
-**Information Received:**
-- [Summarize new information from user response]
-
-**Remaining Questions:**
-1. [Most critical remaining question]
-2. [Secondary question]
-
-**Ready for Code Generation?** [Yes/No] - [reasoning]
+[Your focused questions and clarifications]
 """
+
+        # Add document context if available
+        if state.document_ids:
+            doc_count = len(state.document_ids)
+            base_prompt += f"\n\nDOCUMENT CONTEXT:\nReference the {doc_count} uploaded document(s) for technical details when asking clarification questions.\n"
+
+        # Add requirements history if available
+        if state.requirements and state.requirements.identified_requirements:
+            requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
+            base_prompt += f"\n\nREQUIREMENTS TO CLARIFY:\n{requirements_list}\n\nFocus on technical details needed to implement these requirements.\n"
+
+        return base_prompt
 
     def build_user_prompt(self, message: str, state: ConversationState) -> str:
         return f"User Response: {message}"
@@ -127,7 +130,7 @@ class CodeGenerationTemplate(PromptTemplate):
     """Template for code generation stage."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
-        return """You are PLC-Copilot Code Generator — an expert IEC 61131-3 Structured Text programmer.
+        base_prompt = """You are PLC-Copilot Code Generator - an expert IEC 61131-3 Structured Text programmer.
 
 Generate production-ready Structured Text (ST) code based on requirements.
 
@@ -135,20 +138,30 @@ RESPONSE FORMAT:
 ## Generated PLC Code
 
 ### Structured Text Code
-```st
-[Full ST code here]
-```
+[Full ST code here in structured text format]
 
 ### Explanation
 [Detailed explanation of the logic and operation]
 """
+
+        # Add document context if available
+        if state.document_ids:
+            doc_count = len(state.document_ids)
+            base_prompt += f"\n\nDOCUMENT CONTEXT:\nUse technical details from the {doc_count} uploaded document(s) for accurate code generation.\n"
+
+        # Add requirements history if available
+        if state.requirements and state.requirements.identified_requirements:
+            requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
+            base_prompt += f"\n\nREQUIREMENTS TO IMPLEMENT:\n{requirements_list}\n\nGenerate ST code that fulfills all these requirements.\n"
+
+        return base_prompt
 
     def build_user_prompt(self, message: str, state: ConversationState) -> str:
         return f"Generation Request: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-5-nano",
+            "model": "gpt-4",
             "temperature": 1.0,
             "max_completion_tokens": 2048
         }
@@ -158,7 +171,7 @@ class RefinementTestingTemplate(PromptTemplate):
     """Template for refinement and testing stage."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
-        return """You are PLC-Copilot Code Reviewer — an expert focused on code improvement and testing.
+        base_prompt = """You are PLC-Copilot Code Reviewer - an expert focused on code improvement and testing.
 
 Help users refine and improve generated PLC code based on feedback.
 
@@ -166,20 +179,30 @@ RESPONSE FORMAT:
 ## Code Refinement
 
 ### Modified Code
-```st
-[Updated ST code]
-```
+[Updated ST code in structured text format]
 
 ### Change Explanation
 [Explanation of modifications]
 """
+
+        # Add document context if available
+        if state.document_ids:
+            doc_count = len(state.document_ids)
+            base_prompt += f"\n\nDOCUMENT CONTEXT:\nReference the {doc_count} uploaded document(s) for validation and testing requirements.\n"
+
+        # Add requirements history if available
+        if state.requirements and state.requirements.identified_requirements:
+            requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
+            base_prompt += f"\n\nREQUIREMENTS TO VALIDATE:\n{requirements_list}\n\nEnsure all refinements maintain compliance with these requirements.\n"
+
+        return base_prompt
 
     def build_user_prompt(self, message: str, state: ConversationState) -> str:
         return f"Refinement Request: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
         return {
-            "model": "gpt-5-nano",
+            "model": "gpt-4",
             "temperature": 1.0,
             "max_completion_tokens": 1536
         }
