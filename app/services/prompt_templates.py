@@ -24,8 +24,8 @@ class PromptTemplate(ABC):
         return ModelConfig.CONVERSATION_CONFIG
 
 
-class RequirementsGatheringTemplate(PromptTemplate):
-    """Template for requirements gathering stage."""
+class ProjectKickoffTemplate(PromptTemplate):
+    """Template for the Project Kickoff stage (initial analysis & requirement synthesis)."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
         base_prompt = """You are PLC-Copilot Requirements Analyst - an expert Programmable Logic Controller (PLC) systems engineer specializing in requirements gathering for industrial automation projects.
@@ -46,7 +46,7 @@ TECHNICAL FOCUS:
 - Performance criteria (timing, precision, throughput)
 
 QUESTION STRATEGY:
-- Ask 1-3 focused questions per response
+- Ask only ONE focused question per response
 - Prioritize safety-critical requirements first
 - Clarify process flows and operational modes
 - Identify constraints (budget, timeline, existing equipment)
@@ -83,8 +83,8 @@ RESPONSE FORMAT:
         return ModelConfig.CONVERSATION_CONFIG
 
 
-class QAClarificationTemplate(PromptTemplate):
-    """Template for Q&A clarification stage."""
+class GatherRequirementsTemplate(PromptTemplate):
+    """Template for Gather Requirements stage (focused questions & MCQ)."""
     
     def build_system_prompt(self, state: ConversationState) -> str:
         base_prompt = """You are PLC-Copilot Requirements Specialist - an expert at gathering just the essential information needed for PLC code generation.
@@ -218,8 +218,8 @@ class PromptTemplateFactory:
     """Factory for creating stage-specific prompt templates."""
     
     _templates = {
-        ConversationStage.PROJECT_KICKOFF: RequirementsGatheringTemplate,
-        ConversationStage.GATHER_REQUIREMENTS: QAClarificationTemplate,
+    ConversationStage.PROJECT_KICKOFF: ProjectKickoffTemplate,
+    ConversationStage.GATHER_REQUIREMENTS: GatherRequirementsTemplate,
         ConversationStage.CODE_GENERATION: CodeGenerationTemplate,
         ConversationStage.REFINEMENT_TESTING: RefinementTestingTemplate,
     }
