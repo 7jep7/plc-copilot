@@ -131,3 +131,7 @@ class ConversationResponse(BaseModel):
     stage_progress: Optional[Dict[str, Any]] = None
     suggested_actions: List[str] = Field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
+    # MCQ functionality
+    is_mcq: bool = False
+    mcq_question: Optional[str] = None
+    mcq_options: List[str] = Field(default_factory=list)

@@ -222,18 +222,26 @@ class ConversationOrchestrator:
         # Update stage-specific state based on response
         await self._update_stage_state(conversation, message, response_content)
         
+        # Parse MCQ information if present
+        mcq_data = self._parse_mcq_from_response(response_content)
+        
         # Determine next suggested stage
         next_stage = await self._suggest_next_stage(conversation)
         
         # Build response
-        return ConversationResponse(
+        response = ConversationResponse(
             conversation_id=conversation.conversation_id,
             stage=conversation.current_stage,
             response=response_content,
             next_stage=next_stage,
             stage_progress=self._get_stage_progress(conversation),
-            suggested_actions=self._get_suggested_actions(conversation)
+            suggested_actions=self._get_suggested_actions(conversation),
+            is_mcq=mcq_data["is_mcq"],
+            mcq_question=mcq_data["question"],
+            mcq_options=mcq_data["options"]
         )
+        
+        return response
     
     async def _update_stage_state(self, conversation: ConversationState, user_message: str, ai_response: str):
         """Update stage-specific state based on the interaction."""
@@ -367,6 +375,55 @@ class ConversationOrchestrator:
             ]
         
         return []
+    
+    def _parse_mcq_from_response(self, response: str) -> Dict[str, Any]:
+        """
+        Parse MCQ information from AI response.
+        
+        Returns:
+            dict: {
+                "is_mcq": bool,
+                "question": str or None,
+                "options": List[str]
+            }
+        """
+        import re
+        
+        # Initialize default response
+        mcq_data = {
+            "is_mcq": False,
+            "question": None,
+            "options": []
+        }
+        
+        # Look for MCQ markers
+        mcq_pattern = r'\*\*MCQ_START\*\*(.*?)\*\*MCQ_END\*\*'
+        mcq_match = re.search(mcq_pattern, response, re.DOTALL)
+        
+        if mcq_match:
+            mcq_content = mcq_match.group(1).strip()
+            
+            # Extract question
+            question_pattern = r'\*\*Question\*\*:\s*(.*?)(?=\*\*Options\*\*:)'
+            question_match = re.search(question_pattern, mcq_content, re.DOTALL)
+            
+            if question_match:
+                mcq_data["question"] = question_match.group(1).strip()
+            
+            # Extract options
+            options_pattern = r'\*\*Options\*\*:\s*(.*?)(?=\*\*|$)'
+            options_match = re.search(options_pattern, mcq_content, re.DOTALL)
+            
+            if options_match:
+                options_text = options_match.group(1).strip()
+                # Parse individual options (A), B), C), etc.)
+                option_lines = re.findall(r'^[A-Z]\)\s*(.+)$', options_text, re.MULTILINE)
+                
+                if option_lines:
+                    mcq_data["is_mcq"] = True
+                    mcq_data["options"] = [option.strip() for option in option_lines]
+        
+        return mcq_data
     
     def get_conversation(self, conversation_id: str) -> Optional[ConversationState]:
         """Get conversation by ID."""

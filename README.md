@@ -205,6 +205,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 
 **AI Behavior**:
 - Ask focused, relevant questions based on initial prompt
+- **MCQ Support**: Provides structured multiple-choice questions for standardized options (safety features, voltages, protocols, etc.)
 - Prioritize critical requirements first (safety, I/O, basic sequence)
 - Adapt questioning based on user responses
 - Provide option to proceed when minimum viable requirements are gathered
@@ -900,7 +901,10 @@ Content-Type: application/json
   "suggested_actions": [
     "Provide conveyor speed requirements",
     "Specify safety sensor types"
-  ]
+  ],
+  "is_mcq": false,
+  "mcq_question": null,
+  "mcq_options": []
 }
 ```
 
