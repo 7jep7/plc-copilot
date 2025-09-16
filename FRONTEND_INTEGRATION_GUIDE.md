@@ -36,6 +36,7 @@ Content-Type: application/json
   "stage": "project_kickoff",
   "response": "I'll help you design a conveyor belt control system. Let me start by understanding your specific requirements...",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.0,
   "stage_progress": {
     "requirements_identified": 0,
     "confidence": 0.8
@@ -44,13 +45,20 @@ Content-Type: application/json
     "Provide more details about your conveyor specifications",
     "Upload any existing documentation"
   ],
+  "is_mcq": false,
+  "mcq_question": null,
+  "mcq_options": [],
+  "is_multiselect": false,
+  "generated_code": null,
   "metadata": {
     "tokens_used": 150,
     "processing_time": 2.3
   },
   "is_mcq": false,
   "mcq_question": null,
-  "mcq_options": []
+  "mcq_options": [],
+  "is_multiselect": false,
+  "generated_code": null
 }
 ```
 
@@ -66,6 +74,7 @@ GET /api/v1/conversations/{conversation_id}
   "current_stage": "gather_requirements",
   "created_at": "2025-09-16T07:00:00Z",
   "updated_at": "2025-09-16T07:05:00Z",
+  "gathering_requirements_estimated_progress": 0.4,
   "project_context": {
     "project_type": "conveyor_control",
     "requirements": ["emergency_stop", "variable_speed"],
@@ -129,8 +138,9 @@ The system now provides structured MCQ data in the API response for easier front
 {
   "conversation_id": "uuid-string",
   "stage": "gather_requirements", 
-  "response": "Based on your conveyor system requirements, I need to understand your safety priorities to ensure proper implementation.\n\n[This field contains the full AI response context]",
+  "response": "What safety features do you require for your conveyor system?",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.3,
   "suggested_actions": [
     "Select your required safety features from the options below"
   ],
@@ -141,7 +151,9 @@ The system now provides structured MCQ data in the API response for easier front
     "Light curtains for perimeter protection", 
     "Safety mats for operator zones",
     "Comprehensive safety package (all features)"
-  ]
+  ],
+  "is_multiselect": false,
+  "generated_code": null
 }
 ```
 

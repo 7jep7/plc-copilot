@@ -225,6 +225,17 @@ class ConversationOrchestrator:
         # Parse MCQ information if present
         mcq_data = self._parse_mcq_from_response(response_content)
         
+        # Parse structured code and chat message if present
+        parsed_content = self._parse_structured_response(response_content)
+        
+        # Parse requirements gathering progress
+        progress_data = self._parse_requirements_progress(response_content, conversation.current_stage)
+        
+        # For MCQ responses, simplify the chat message to just be the question
+        final_chat_message = parsed_content["chat_message"]
+        if mcq_data["is_mcq"] and mcq_data["question"]:
+            final_chat_message = mcq_data["question"]
+        
         # Determine next suggested stage
         next_stage = await self._suggest_next_stage(conversation)
         
@@ -232,13 +243,16 @@ class ConversationOrchestrator:
         response = ConversationResponse(
             conversation_id=conversation.conversation_id,
             stage=conversation.current_stage,
-            response=response_content,
+            response=final_chat_message,  # Use simplified chat message for MCQ
             next_stage=next_stage,
             stage_progress=self._get_stage_progress(conversation),
             suggested_actions=self._get_suggested_actions(conversation),
             is_mcq=mcq_data["is_mcq"],
             mcq_question=mcq_data["question"],
-            mcq_options=mcq_data["options"]
+            mcq_options=mcq_data["options"],
+            is_multiselect=mcq_data["is_multiselect"],
+            generated_code=parsed_content["code"],
+            gathering_requirements_estimated_progress=progress_data["progress"]
         )
         
         return response
@@ -384,7 +398,8 @@ class ConversationOrchestrator:
             dict: {
                 "is_mcq": bool,
                 "question": str or None,
-                "options": List[str]
+                "options": List[str],
+                "is_multiselect": bool
             }
         """
         import re
@@ -393,10 +408,11 @@ class ConversationOrchestrator:
         mcq_data = {
             "is_mcq": False,
             "question": None,
-            "options": []
+            "options": [],
+            "is_multiselect": False
         }
         
-        # Look for MCQ markers
+        # Look for MCQ markers (both old and new formats)
         mcq_pattern = r'\*\*MCQ_START\*\*(.*?)\*\*MCQ_END\*\*'
         mcq_match = re.search(mcq_pattern, response, re.DOTALL)
         
@@ -422,8 +438,122 @@ class ConversationOrchestrator:
                 if option_lines:
                     mcq_data["is_mcq"] = True
                     mcq_data["options"] = [option.strip() for option in option_lines]
+                    
+                    # Check for multiselect indicators
+                    multiselect_indicators = [
+                        "select all that apply",
+                        "multiple answers",
+                        "choose multiple",
+                        "more than one",
+                        "all applicable"
+                    ]
+                    
+                    full_content = (mcq_content + " " + mcq_data["question"] or "").lower()
+                    mcq_data["is_multiselect"] = any(indicator in full_content for indicator in multiselect_indicators)
+        
+        # Also check for informal MCQ format (like the one in the test output)
+        if not mcq_data["is_mcq"]:
+            # Look for Question: ... Options: pattern
+            informal_question_pattern = r'\*\*Question\*\*:\s*(.*?)(?=\*\*Options\*\*:)'
+            informal_question_match = re.search(informal_question_pattern, response, re.DOTALL)
+            
+            if informal_question_match:
+                mcq_data["question"] = informal_question_match.group(1).strip()
+                
+                # Look for options after the question
+                informal_options_pattern = r'\*\*Options\*\*:\s*(.*?)(?=\*\*|$)'
+                informal_options_match = re.search(informal_options_pattern, response, re.DOTALL)
+                
+                if informal_options_match:
+                    options_text = informal_options_match.group(1).strip()
+                    option_lines = re.findall(r'^[A-Z]\)\s*(.+)$', options_text, re.MULTILINE)
+                    
+                    if option_lines:
+                        mcq_data["is_mcq"] = True
+                        mcq_data["options"] = [option.strip() for option in option_lines]
         
         return mcq_data
+    
+    def _parse_structured_response(self, response: str) -> Dict[str, Any]:
+        """
+        Parse structured response with <code> and <chat_message> tags.
+        
+        Returns:
+            dict: {
+                "code": str or None,
+                "chat_message": str (cleaned response)
+            }
+        """
+        import re
+        
+        # Initialize default response
+        parsed_data = {
+            "code": None,
+            "chat_message": response  # Default to full response
+        }
+        
+        # Extract code block
+        code_pattern = r'<code>(.*?)</code>'
+        code_match = re.search(code_pattern, response, re.DOTALL)
+        
+        if code_match:
+            parsed_data["code"] = code_match.group(1).strip()
+        
+        # Extract chat message
+        chat_pattern = r'<chat_message>(.*?)</chat_message>'
+        chat_match = re.search(chat_pattern, response, re.DOTALL)
+        
+        if chat_match:
+            parsed_data["chat_message"] = chat_match.group(1).strip()
+        elif code_match:
+            # If we have code but no chat_message tag, remove the code tags from response
+            cleaned_response = re.sub(code_pattern, '', response, flags=re.DOTALL)
+            parsed_data["chat_message"] = cleaned_response.strip()
+        
+        # Always clean any remaining tags from the chat message
+        if parsed_data["chat_message"]:
+            # Remove any remaining <code> and <chat_message> tags
+            cleaned = re.sub(r'</?code>', '', parsed_data["chat_message"])
+            cleaned = re.sub(r'</?chat_message>', '', cleaned)
+            parsed_data["chat_message"] = cleaned.strip()
+        
+        return parsed_data
+    
+    def _parse_requirements_progress(self, response: str, current_stage) -> Dict[str, Any]:
+        """
+        Parse requirements gathering progress from AI response.
+        
+        Returns:
+            dict: {
+                "progress": float (0.0 to 1.0)
+            }
+        """
+        import re
+        from app.schemas.conversation import ConversationStage
+        
+        # Default progress values based on stage
+        if current_stage == ConversationStage.PROJECT_KICKOFF:
+            default_progress = 0.0
+        elif current_stage == ConversationStage.GATHER_REQUIREMENTS:
+            default_progress = 0.5  # Default to halfway if no specific progress found
+        else:  # CODE_GENERATION, REFINEMENT_TESTING, COMPLETED
+            default_progress = 1.0
+        
+        progress_data = {"progress": default_progress}
+        
+        # Only try to parse progress for GATHER_REQUIREMENTS stage
+        if current_stage == ConversationStage.GATHER_REQUIREMENTS:
+            # Look for progress patterns like "1/5", "2/10", etc.
+            progress_pattern = r'\*\*PROGRESS\*\*:\s*(\d+)/(\d+)'
+            progress_match = re.search(progress_pattern, response)
+            
+            if progress_match:
+                current = int(progress_match.group(1))
+                total = int(progress_match.group(2))
+                if total > 0:
+                    progress_data["progress"] = min(current / total, 1.0)  # Cap at 1.0
+        
+        return progress_data
     
     def get_conversation(self, conversation_id: str) -> Optional[ConversationState]:
         """Get conversation by ID."""

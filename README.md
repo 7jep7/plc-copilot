@@ -901,6 +901,7 @@ Content-Type: application/json
   "stage": "project_kickoff",
   "response": "I'll help you design a conveyor belt control system...",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.0,
   "stage_progress": { "requirements_identified": 2, "confidence": 0.7 },
   "suggested_actions": [
     "Provide conveyor speed requirements",
@@ -908,7 +909,9 @@ Content-Type: application/json
   ],
   "is_mcq": false,
   "mcq_question": null,
-  "mcq_options": []
+  "mcq_options": [],
+  "is_multiselect": false,
+  "generated_code": null
 }
 ```
 
@@ -917,8 +920,9 @@ Content-Type: application/json
 {
   "conversation_id": "uuid-string",
   "stage": "gather_requirements",
-  "response": "Based on your conveyor system requirements, I need to understand your safety priorities...",
+  "response": "What safety features do you require for your conveyor system?",
   "next_stage": "gather_requirements",
+  "gathering_requirements_estimated_progress": 0.6,
   "suggested_actions": ["Select your required safety features"],
   "is_mcq": true,
   "mcq_question": "What safety features do you require for your conveyor system?",
@@ -927,7 +931,9 @@ Content-Type: application/json
     "Light curtains for perimeter protection",
     "Safety mats for operator zones",
     "Comprehensive safety package (all features)"
-  ]
+  ],
+  "is_multiselect": false,
+  "generated_code": null
 }
 ```
 

@@ -52,7 +52,20 @@ QUESTION STRATEGY:
 - Identify constraints (budget, timeline, existing equipment)
 - Confirm environmental conditions and standards compliance
 
+MCQ FOR VAGUE REQUESTS:
+If the user provides a very vague automation request (like "automate my factory" or "need PLC help"), offer specific examples using MCQ format:
+
+**MCQ_START**
+**Question**: What type of automation project are you looking to implement?
+**Options**:
+A) Conveyor belt sorting system with safety interlocks
+B) Temperature control for manufacturing process
+C) Packaging line with count and quality control
+D) Material handling with robotic integration
+**MCQ_END**
+
 RESPONSE FORMAT:
+<chat_message>
 ## Requirements Analysis
 
 [Your analysis and follow-up questions]
@@ -60,7 +73,9 @@ RESPONSE FORMAT:
 ## Current Requirements Summary
 - [List key requirements identified so far]
 - [Include any assumptions that need validation]
-"""
+</chat_message>
+
+IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -112,17 +127,27 @@ C) [Option 3]
 D) Other (please specify)
 **MCQ_END**
 
+PROGRESS TRACKING:
+Include progress information in this format:
+**PROGRESS**: [X]/[Y] scoping questions asked
+
 CRITICAL RULES:
 - Only ONE question per response (either open OR MCQ, never both)
 - Focus on what's absolutely necessary for code generation
 - Use simple, clear language
 - Prioritize safety requirements, then I/O, then operational details
+- Estimate total questions needed and track progress
 
 RESPONSE FORMAT:
+<chat_message>
+**PROGRESS**: [X]/[Y] scoping questions asked
+
 [Ask your single, focused question - either open question OR MCQ format above]
 
 **Next Step:** Based on your answer, I'll [explain what you'll do with this information]
-"""
+</chat_message>
+
+IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -148,15 +173,16 @@ class CodeGenerationTemplate(PromptTemplate):
 
 Generate production-ready Structured Text (ST) code based on requirements.
 
-RESPONSE FORMAT:
-## Generated PLC Code
+CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsing:
+<code>
+[Full ST code in structured text format - this section will be parsed out for the frontend]
+</code>
 
-### Structured Text Code
-[Full ST code here in structured text format]
+<chat_message>
+[Your explanation of the code logic, operation, and implementation details - this becomes the visible conversation message]
+</chat_message>
 
-### Explanation
-[Detailed explanation of the logic and operation]
-"""
+IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:
@@ -185,15 +211,16 @@ class RefinementTestingTemplate(PromptTemplate):
 
 Help users refine and improve generated PLC code based on feedback.
 
-RESPONSE FORMAT:
-## Code Refinement
+CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsing:
+<code>
+[Updated ST code in structured text format - this section will be parsed out for the frontend]
+</code>
 
-### Modified Code
-[Updated ST code in structured text format]
+<chat_message>
+[Your explanation of the modifications made and why they improve the code - this becomes the visible conversation message]
+</chat_message>
 
-### Change Explanation
-[Explanation of modifications]
-"""
+IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
         if state.document_ids:

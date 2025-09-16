@@ -8,10 +8,10 @@ This system implements a robust, modular architecture for multi-stage conversati
 
 ### 1. Conversation Stages (`app/schemas/conversation.py`)
 
-- **PROJECT_KICKOFF**: Initial user query analysis and requirement identification
-- **GATHER_REQUIREMENTS**: Technical Q&A to fill information gaps (supports MCQ format)
-- **CODE_GENERATION**: Structured Text (ST) PLC code generation
-- **REFINEMENT_TESTING**: Code refinement, testing, and optimization
+- **project_kickoff**: Initial user query analysis and requirement identification
+- **gather_requirements**: Technical Q&A to fill information gaps (supports MCQ format)
+- **code_generation**: Structured Text (ST) PLC code generation
+- **refinement_testing**: Code refinement, testing, and optimization
 
 ### 2. Stage Detection Service (`app/services/stage_detection_service.py`)
 
