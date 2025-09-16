@@ -171,7 +171,7 @@ celery -A app.worker worker --loglevel=info
 
 The PLC Copilot follows a structured 4-stage conversation flow designed for efficiency and smooth user experience. Most time is spent in stages 2 and 4, while stages 1 and 3 are kept short to maintain momentum.
 
-### Stage 1: Initial User Prompt 🚀
+### Stage 1: Project Kickoff 🚀
 **Purpose**: Capture the user's initial automation idea or problem statement.
 
 **Duration**: Short (1-2 interactions)
@@ -188,7 +188,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - No complex forms or overwhelming questions
 - AI acknowledges the request and moves to requirements gathering
 
-### Stage 2: Requirement Definition 📋
+### Stage 2: Gather Requirements 📋
 **Purpose**: Interactive Q&A to gather all necessary technical requirements and context.
 
 **Duration**: Medium (focused but thorough - aim for smooth progression)
@@ -205,7 +205,11 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 
 **AI Behavior**:
 - Ask focused, relevant questions based on initial prompt
+- **Single-Question Focus**: Each response contains exactly one focused question to prevent user overload
 - **MCQ Support**: Provides structured multiple-choice questions for standardized options (safety features, voltages, protocols, etc.)
+  - Structured API fields: `is_mcq`, `mcq_question`, `mcq_options`
+  - Frontend should use ONLY MCQ fields for user interaction when `is_mcq` is true
+  - Clean, focused UI without competing text or overwhelming choices
 - Prioritize critical requirements first (safety, I/O, basic sequence)
 - Adapt questioning based on user responses
 - Provide option to proceed when minimum viable requirements are gathered
@@ -220,7 +224,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - Minimum viable requirements captured, OR
 - User manually forces transition to Stage 3
 
-### Stage 3: PLC Code Generation ⚡
+### Stage 3: Code Generation ⚡
 **Purpose**: Generate initial PLC code based on gathered requirements.
 
 **Duration**: Short (automated process with progress indication)
@@ -237,7 +241,7 @@ The PLC Copilot follows a structured 4-stage conversation flow designed for effi
 - Basic documentation and comments
 - Initial code structure ready for testing
 
-### Stage 4: Testing and Refinement �
+### Stage 4: Refinement & Testing 🔧
 **Purpose**: Test code robustness and refine through chat interaction or manual edits.
 
 **Duration**: Extended (most time spent here - iterative improvement)
@@ -908,6 +912,31 @@ Content-Type: application/json
 }
 ```
 
+**MCQ Response Example (gather_requirements stage):**
+```json
+{
+  "conversation_id": "uuid-string",
+  "stage": "gather_requirements",
+  "response": "Based on your conveyor system requirements, I need to understand your safety priorities...",
+  "next_stage": "gather_requirements",
+  "suggested_actions": ["Select your required safety features"],
+  "is_mcq": true,
+  "mcq_question": "What safety features do you require for your conveyor system?",
+  "mcq_options": [
+    "Emergency stop buttons only",
+    "Light curtains for perimeter protection",
+    "Safety mats for operator zones",
+    "Comprehensive safety package (all features)"
+  ]
+}
+```
+
+**Critical Frontend MCQ Handling:**
+- When `is_mcq` is true, display ONLY `mcq_question` and `mcq_options` to user
+- Avoid displaying full `response` text alongside MCQ to prevent cognitive overload
+- Provide clean, focused interface for user selection
+```
+
 #### Get Conversation State
 ```http
 GET /api/v1/conversations/{conversation_id}
@@ -961,6 +990,10 @@ Content-Type: application/json
 ```
 
 ## Frontend Integration
+
+For comprehensive frontend integration details, including MCQ handling, stage management, and best practices, see the **[Frontend Integration Guide](./FRONTEND_INTEGRATION_GUIDE.md)**.
+
+### Quick Integration Summary
 
 ### 📋 Frontend Integration Guide
 
@@ -1034,10 +1067,10 @@ async function transitionStage(conversationId: string, targetStage: string) {
 // Stage indicators
 const StageIndicator = ({ currentStage }: { currentStage: string }) => {
   const stages = [
-    { key: 'project_kickoff', label: 'Kickoff', icon: '�' },
-    { key: 'gather_requirements', label: 'Requirements', icon: '📝' },
-    { key: 'code_generation', label: 'Generation', icon: '⚙️' },
-    { key: 'refinement_testing', label: 'Testing & Refinement', icon: '🔧' }
+    { key: 'project_kickoff', label: 'Project Kickoff', icon: '�' },
+    { key: 'gather_requirements', label: 'Gather Requirements', icon: '📝' },
+    { key: 'code_generation', label: 'Code Generation', icon: '⚙️' },
+    { key: 'refinement_testing', label: 'Refinement & Testing', icon: '🔧' }
   ];
   
   return (
