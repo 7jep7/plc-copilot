@@ -1,6 +1,32 @@
 # PLC Copilot Backend
 
-A FastAPI backend for automating PLC (Programmable Logic Controller) programming and testing.
+> **A FastAPI backend for automating PLC (Programmable Logic Controller) programming and testing.**
+
+🤖 **AI-Powered**: Converts natural language requirements into production-ready PLC code  
+📋 **4-Stage Workflow**: Guided conversation from initial idea to refined implementation  
+📄 **Document Intelligence**: Parses technical manuals to extract relevant device information  
+🔧 **Code Library**: Industrial-grade ST code samples with intelligent search and management  
+🚀 **Production Ready**: Deployed on Render.com with comprehensive monitoring and health checks
+
+## Table of Contents
+
+### Getting Started
+- [Vision](#vision)
+- [Features](#features)
+- [Quick Start](#quick-start)
+
+### API Documentation
+- [API Reference](#api-reference)
+- [User Workflow](#user-workflow)
+- [Code Library (WIP)](#code-library-wip)
+
+### Operations
+- [Deployment](#deployment)
+- [Development](#development)
+
+### Integration
+- [Frontend Integration](#frontend-integration)
+- [Dependencies](#dependencies)
 
 ## Vision
 
@@ -8,11 +34,14 @@ Create the copilot for Programmable Logic Controllers. Automate automating. Prog
 
 ## Features
 
-### MVP Functionality
+### Core Functionality ✅
 1. **Multi-Stage Conversation System**: Guided 4-stage workflow from requirements to code refinement
 2. **PDF Document Parsing**: Upload industrial device manuals and extract critical information relevant for PLC code
 3. **AI-Powered PLC Code Generation**: Convert user prompts and manual context into structured text (PLC code) using OpenAI models
 4. **Digital Twin Testing**: Simple simulation functionality to test structured text (PLC code) for robustness
+
+### Work in Progress 🚧
+5. **Code Library & Knowledge Base**: Industrial-grade ST code sample library with comprehensive API for uploading, searching, and managing user-contributed code. Includes semantic search capabilities and code similarity matching. Foundation for future RAG (Retrieval-Augmented Generation) integration.
 
 ### Technical Features
 - **RESTful API**: Two-tier approach with conversation workflows and simple chat endpoints
@@ -48,6 +77,9 @@ docker-compose up --build
 ```
 
 3. **Access the API**:
+- API: http://localhost:8000
+- Interactive docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 - API Documentation: http://localhost:8000/docs
 - Health Check: http://localhost:8000/health
 
@@ -87,7 +119,15 @@ python scripts/dev_server.py
 celery -A app.worker worker --loglevel=info
 ```
 
-## API Endpoints
+## API Reference
+
+### Core Conversation API
+- `POST /api/v1/conversations/` - Start new conversation (4-stage workflow)
+- `PUT /api/v1/conversations/{id}` - Continue conversation with user message
+- `GET /api/v1/conversations/{id}` - Get conversation state and history
+
+### Simple Chat API
+- `POST /api/v1/ai/chat` - Stateless chat interaction with AI
 
 ### Document Management
 - `POST /api/v1/documents/upload` - Upload and parse PDF manuals
@@ -109,11 +149,25 @@ celery -A app.worker worker --loglevel=info
 - `POST /api/v1/digital-twin/{id}/test` - Test PLC code in simulation
 - `GET /api/v1/digital-twin/{id}/runs` - Get simulation test results
 
+### Code Library (WIP) 🔧
+*Work in Progress - Advanced ST code management and semantic search*
+
+- `GET /api/v1/library/` - Library summary and statistics
+- `GET /api/v1/library/structure` - Complete directory structure
+- `POST /api/v1/library/search` - Search files by query and domain
+- `GET /api/v1/library/browse/{domain}` - Browse files by domain
+- `GET /api/v1/library/file/{domain}/{filename}` - Get file content
+- `POST /api/v1/library/upload` - Upload ST files via JSON
+- `POST /api/v1/library/upload-file` - Upload ST files via multipart
+- `POST /api/v1/library/similar` - Find similar files
+- `GET /api/v1/library/user-uploads` - List user contributions
+- `DELETE /api/v1/library/user-uploads/{domain}/{filename}` - Delete files
+
 ### System
 - `GET /health` - Health check endpoint
 - `GET /` - API information
 
-## 4-Stage User Flow
+## User Workflow
 
 The PLC Copilot follows a structured 4-stage conversation flow designed for efficiency and smooth user experience. Most time is spent in stages 2 and 4, while stages 1 and 3 are kept short to maintain momentum.
 
@@ -293,7 +347,7 @@ const response = await fetch('/api/v1/ai/chat', {
 - Requirements, generated code, and refinements tracked
 - Export and version control throughout the workflow
 
-## Production Deployment
+## Deployment
 
 ### Render.com (Recommended)
 
@@ -426,6 +480,90 @@ for page_num in range(doc.page_count):
 - **Chunked analysis** for large documents with section-wise processing
 - **Image/diagram extraction** using GPT-4-Vision for circuit diagrams
 - **Multi-language support** for German/Japanese technical documentation
+
+## Code Library (WIP) 🔧
+
+The Code Library feature provides a comprehensive system for managing industrial-grade ST (Structured Text) code samples, enabling code reuse, discovery, and intelligent retrieval.
+
+### Current Implementation
+
+**ST Code Sample Library**: Industrial-grade examples covering:
+- **Conveyor Systems**: Belt control with safety features and E-stop handling
+- **Safety Systems**: SIL2 safety controllers with dual-channel monitoring  
+- **Process Control**: Advanced PID controllers with auto-tuning and anti-windup
+- **Motor Control**: VFD motor control systems with protection and energy optimization
+
+**Complete REST API** for code management:
+- Browse and search the code library by domain and keywords
+- Upload user-contributed ST files with metadata and categorization
+- Find similar code patterns and get intelligent recommendations
+- Manage user uploads with full CRUD operations
+
+**File Organization**:
+```
+st_code_library/           # Core library (read-only examples)
+├── conveyor_systems/
+├── safety_systems/
+├── process_control/
+└── motor_control/
+
+user_uploads/st_code/      # User contributions (writable)
+├── user_domain_1/
+└── user_domain_2/
+```
+
+### Usage Examples
+
+**Browse the library**:
+```bash
+GET /api/v1/library/                    # Get summary and statistics
+GET /api/v1/library/browse/motor_control # Browse specific domain
+GET /api/v1/library/file/safety_systems/safety_controller_sil2.st
+```
+
+**Search for code**:
+```bash
+POST /api/v1/library/search
+{
+  "query": "motor protection overload",
+  "domain": "motor_control",
+  "limit": 5
+}
+```
+
+**Upload custom code**:
+```bash
+POST /api/v1/library/upload
+{
+  "filename": "my_custom_controller.st",
+  "content": "PROGRAM MyController...",
+  "domain": "process_control",
+  "description": "Custom temperature controller",
+  "author": "John Engineer",
+  "tags": ["temperature", "pid", "custom"]
+}
+```
+
+### Future Roadmap (RAG Integration)
+
+**Planned Features**:
+- **Vector Embeddings**: Use OpenAI embeddings for semantic code search
+- **LangChain Integration**: RAG (Retrieval-Augmented Generation) for intelligent code suggestions
+- **Context-Aware Generation**: Enhance PLC code generation with relevant library examples
+- **Automatic Code Categorization**: AI-powered tagging and domain classification
+- **Code Quality Scoring**: Automated analysis of uploaded code for best practices
+
+**Integration Points**:
+- **Conversation Orchestrator**: Inject relevant code examples during multi-stage conversations
+- **PLC Code Generation**: Use library patterns to improve generated code quality
+- **Smart Recommendations**: Suggest similar implementations based on user requirements
+
+### Testing
+
+Run the Code Library API test suite:
+```bash
+python scripts/test_code_library_api.py
+```
 
 ## Development
 
@@ -796,6 +934,8 @@ Content-Type: application/json
 }
 ```
 
+## Frontend Integration
+
 ### 📋 Frontend Integration Guide
 
 #### Recommended Workflow for React/Vue/Angular
@@ -1005,3 +1145,16 @@ This backend provides a complete foundation for PLC automation workflows:
 2. **Use conversation endpoints** for full workflow features
 3. **Test with provided examples** and Swagger UI at `/docs`
 4. **Extend prompt templates** for domain-specific requirements
+
+## Dependencies
+
+### Technology Stack
+
+**Core Framework**: FastAPI with Uvicorn/Gunicorn deployment  
+**Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations  
+**AI Integration**: OpenAI GPT models for conversation and code generation  
+**Document Processing**: pdfplumber, PyMuPDF, PyPDF2 for PDF parsing  
+**Background Tasks**: Celery with Redis for async processing  
+**Deployment**: Render.com with Docker containerization  
+
+**LangChain**: Currently included in dependencies for future RAG (Retrieval-Augmented Generation) integration with the Code Library feature. Not actively used in MVP but retained for planned semantic search and intelligent code retrieval capabilities.
