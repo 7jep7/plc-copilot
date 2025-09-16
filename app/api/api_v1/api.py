@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import documents, plc_code, digital_twin, ai, conversations
+from app.api.api_v1.endpoints import documents, plc_code, digital_twin, ai, conversations, code_library
 
 api_router = APIRouter()
 
@@ -35,4 +35,11 @@ api_router.include_router(
     conversations.router,
     prefix="/conversations",
     tags=["conversations"]
+)
+
+# Code library endpoints
+api_router.include_router(
+    code_library.router,
+    prefix="/library",
+    tags=["code-library"]
 )
