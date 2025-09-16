@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     
+    # Email Configuration for Notifications
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    NOTIFICATION_EMAIL: str = "je77petersen@gmail.com"
+    
     # Sentry
     SENTRY_DSN: Optional[str] = None
     

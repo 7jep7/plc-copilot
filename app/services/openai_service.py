@@ -2,7 +2,7 @@
 
 import openai
 import structlog
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
 import re
 
@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.models import ModelConfig
 from app.models.document import Document
 from app.schemas.plc_code import PLCGenerationRequest
+from app.services.notification_service import NotificationService
 
 logger = structlog.get_logger()
 
@@ -36,23 +37,202 @@ class OpenAIService:
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.notification_service = NotificationService()
+        self._rate_limited_models = set()  # Track models that hit daily rate limits this session
+        self._current_active_model = None  # Track which model we're currently using
+        self._last_reset_date = None  # Track when we last reset the rate limit memory
 
     def _safe_chat_create(self, **kwargs):
-        """Call chat.completions.create and raise OpenAIParameterError when the
-        API reports unsupported parameters or values.
-        """
+        """Call chat.completions.create with automatic fallback on rate limits."""
+        return self._safe_chat_create_with_fallback(**kwargs)
+    
+    def _safe_chat_create_with_fallback(self, **kwargs):
+        """Call chat.completions.create and handle rate limits with intelligent model selection."""
+        original_model = kwargs.get('model', ModelConfig.CONVERSATION_MODEL)
+        request_obj = kwargs.pop('request', None)  # Extract request object, don't pass to OpenAI
+        
+        # Determine the best model to use based on rate limit history
+        selected_model = self._get_best_available_model(original_model)
+        kwargs['model'] = selected_model
+        
         try:
-            return self.client.chat.completions.create(**kwargs)
+            response = self.client.chat.completions.create(**kwargs)
+            
+            # If this is the first time using a different model, log the switch
+            if self._current_active_model != selected_model:
+                if self._current_active_model is not None:
+                    logger.info(
+                        "Model switched for this session",
+                        from_model=self._current_active_model,
+                        to_model=selected_model,
+                        reason="rate_limit_avoidance"
+                    )
+                self._current_active_model = selected_model
+            
+            return response
+            
         except Exception as e:
-            msg = str(e)
-            # Look for explicit unsupported parameter/value messages
-            m = re.search(r"Unsupported (?:parameter|value): '\\'([^\\']+)\\'", msg)
+            error_msg = str(e)
+            
+            # Check if this is a rate limit error
+            if self._is_rate_limit_error(error_msg):
+                # Mark this model as rate limited
+                self._rate_limited_models.add(selected_model)
+                
+                # Try to find another model that hasn't been rate limited
+                fallback_model = self._get_best_available_model(selected_model)
+                
+                if fallback_model == selected_model:
+                    # No alternatives available, this error will bubble up
+                    logger.error(
+                        "All available models are rate limited",
+                        rate_limited_models=list(self._rate_limited_models),
+                        attempted_model=selected_model
+                    )
+                    raise e
+                
+                logger.warning(
+                    "Rate limit hit, switching to alternative model",
+                    rate_limited_model=selected_model,
+                    fallback_model=fallback_model,
+                    error=error_msg
+                )
+                
+                # Send notification email (once per session)
+                conversation_id = getattr(request_obj, 'conversation_id', None) if request_obj else None
+                self.notification_service.send_rate_limit_alert(
+                    primary_model=selected_model,
+                    fallback_model=fallback_model,
+                    error_message=error_msg,
+                    conversation_id=conversation_id
+                )
+                
+                # Try with the alternative model
+                try:
+                    kwargs['model'] = fallback_model
+                    response = self.client.chat.completions.create(**kwargs)
+                    
+                    # Update current active model
+                    self._current_active_model = fallback_model
+                    
+                    logger.info(
+                        "Fallback model successful",
+                        rate_limited_model=selected_model,
+                        successful_model=fallback_model
+                    )
+                    
+                    return response
+                    
+                except Exception as fallback_error:
+                    # Mark the fallback model as rate limited too
+                    self._rate_limited_models.add(fallback_model)
+                    
+                    logger.error(
+                        "Fallback model also failed",
+                        rate_limited_model=selected_model,
+                        failed_fallback=fallback_model,
+                        fallback_error=str(fallback_error)
+                    )
+                    # Raise the original error
+                    raise e
+            
+            # For non-rate-limit errors, check for parameter errors
+            m = re.search(r"Unsupported (?:parameter|value): '\\'([^\\']+)\\'", error_msg)
             if not m:
-                m = re.search(r"Unsupported (?:parameter|value): '([^']+)'", msg)
+                m = re.search(r"Unsupported (?:parameter|value): '([^']+)'", error_msg)
 
             param = m.group(1) if m else None
             # Raise a structured error the API layer can handle
-            raise OpenAIParameterError(param=param, message=msg)
+            raise OpenAIParameterError(param=param, message=error_msg)
+    
+    def _get_best_available_model(self, requested_model: str) -> str:
+        """Get the best available model that hasn't hit rate limits (with daily reset detection)."""
+        
+        # Check if we should reset rate limit memory for a new day
+        self._check_and_reset_daily_limits()
+        
+        # If the requested model hasn't been rate limited, use it
+        if requested_model not in self._rate_limited_models:
+            return requested_model
+        
+        # Try the cascade of fallback models
+        fallback_models = ModelConfig.get_fallback_models(requested_model)
+        for fallback in fallback_models:
+            if fallback not in self._rate_limited_models:
+                logger.info(
+                    "Using fallback model",
+                    original_model=requested_model,
+                    selected_model=fallback,
+                    rate_limited_models=list(self._rate_limited_models)
+                )
+                return fallback
+        
+        # If all models in the cascade are rate limited, return the requested model
+        # (it will fail, but that's expected and will trigger proper error handling)
+        logger.warning(
+            "All models in cascade are rate limited, returning requested model",
+            requested_model=requested_model,
+            cascade_models=fallback_models,
+            rate_limited_models=list(self._rate_limited_models)
+        )
+        return requested_model
+    
+    def _check_and_reset_daily_limits(self):
+        """Reset rate limit memory if it's a new day (OpenAI limits reset at midnight UTC)."""
+        from datetime import datetime, timezone
+        
+        current_date = datetime.now(timezone.utc).date()
+        
+        if self._last_reset_date is None:
+            # First time - initialize
+            self._last_reset_date = current_date
+            return
+        
+        if current_date > self._last_reset_date:
+            # It's a new day! Reset rate limit memory
+            old_rate_limited = list(self._rate_limited_models)
+            self._rate_limited_models.clear()
+            self._last_reset_date = current_date
+            
+            # Reset email notification flag too
+            self.notification_service._email_sent_this_session = False
+            
+            logger.info(
+                "Daily rate limit reset - all models available again",
+                previous_date=str(self._last_reset_date),
+                current_date=str(current_date),
+                previously_rate_limited=old_rate_limited
+            )
+    
+    def _is_rate_limit_error(self, error_message: str) -> bool:
+        """Check if the error is related to rate limits."""
+        rate_limit_indicators = [
+            "rate limit",
+            "Rate limit",
+            "429",
+            "requests per",
+            "quota exceeded",
+            "too many requests"
+        ]
+        return any(indicator in error_message for indicator in rate_limit_indicators)
+    
+    def get_session_model_status(self) -> dict:
+        """Get the current session's model usage status."""
+        from datetime import datetime, timezone
+        
+        # Check for daily reset first
+        self._check_and_reset_daily_limits()
+        
+        return {
+            "current_active_model": self._current_active_model,
+            "rate_limited_models": list(self._rate_limited_models),
+            "available_models": [
+                model for model in [ModelConfig.CONVERSATION_MODEL, ModelConfig.get_fallback_model(ModelConfig.CONVERSATION_MODEL)]
+                if model not in self._rate_limited_models
+            ],
+            "last_reset_date": str(self._last_reset_date) if self._last_reset_date else None,
+            "current_utc_date": str(datetime.now(timezone.utc).date())
+        }
     
     async def generate_plc_code(
         self,
@@ -344,6 +524,7 @@ END_PROGRAM
                 messages=call_messages,
                 temperature=getattr(request, "temperature", 1.0),
                 max_completion_tokens=max_tokens_val,
+                request=request,  # Pass request object for conversation_id access
             )
 
         try:

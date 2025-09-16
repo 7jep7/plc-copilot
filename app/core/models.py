@@ -11,7 +11,7 @@ class ModelConfig:
     _is_testing = os.getenv("TESTING", "false").lower() == "true"
     _is_dev = os.getenv("ENVIRONMENT", "production") == "development"
     
-    # Model names as constants - optimized for cost
+    # Primary model names as constants - optimized for cost
     # Use cheaper models in testing/dev, premium models in production
     if _is_testing:
         DOCUMENT_ANALYSIS_MODEL = "gpt-4o-mini"  # Use cheaper model for tests
@@ -22,6 +22,36 @@ class ModelConfig:
     else:
         DOCUMENT_ANALYSIS_MODEL = "gpt-4o"  # For extracting info from parsed PDFs
         CONVERSATION_MODEL = "gpt-4o-mini"  # For everything else (conversations, stage detection, etc.)
+    
+    # Fallback models when primary models hit rate limits
+    # Ordered by cost-effectiveness: cheapest first, most capable last
+    # Only includes models available with the current OpenAI account/tier
+    FALLBACK_CASCADE = [
+        "gpt-4o-mini",        # Most cost-effective (~$0.15/1M input tokens)
+        "gpt-3.5-turbo",      # Legacy but still available, very cheap (~$0.50/1M input tokens)
+        "gpt-4o",             # Current flagship, more expensive (~$2.50/1M input tokens)
+    ]
+    
+    @classmethod
+    def get_fallback_models(cls, primary_model: str) -> list[str]:
+        """Get ordered list of fallback models for rate limit situations."""
+        # Start with the cascade, but remove the primary model and reorder
+        fallback_list = cls.FALLBACK_CASCADE.copy()
+        
+        if primary_model in fallback_list:
+            fallback_list.remove(primary_model)
+        
+        # If primary model is not in cascade, add it at the appropriate position
+        if primary_model not in cls.FALLBACK_CASCADE:
+            fallback_list.insert(0, primary_model)
+        
+        return fallback_list
+    
+    @classmethod
+    def get_fallback_model(cls, primary_model: str) -> str:
+        """Get single fallback model for backwards compatibility."""
+        fallback_models = cls.get_fallback_models(primary_model)
+        return fallback_models[0] if fallback_models else "gpt-4o"
     
     # Model configurations for different use cases - optimized token limits
     DOCUMENT_ANALYSIS_CONFIG = {
