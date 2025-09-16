@@ -58,7 +58,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             # Simple chat without stage-specific prompts
             content, usage = await ai.chat_completion(request)
             
-        return ChatResponse(model=request.model or "gpt-5-nano", content=content, usage=usage)
+        return ChatResponse(model=request.model or "gpt-4o-mini", content=content, usage=usage)
         
     except OpenAIParameterError as e:
         # Surface parameter/value issues from OpenAI as client errors (400)

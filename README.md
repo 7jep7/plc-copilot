@@ -331,7 +331,7 @@ const response = await fetch('/api/v1/ai/chat', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     user_prompt: "Explain PLC ladder logic basics",
-    model: "gpt-4",
+    model: "gpt-4o-mini",
     temperature: 0.7
   })
 });
@@ -424,7 +424,7 @@ plc-copilot/
 - **Framework**: FastAPI (Python 3.11)
 - **Database**: PostgreSQL with SQLAlchemy ORM
 - **Cache/Queue**: Redis with Celery for background tasks
-- **AI**: OpenAI GPT-4 for code generation and document analysis
+- **AI**: OpenAI GPT-4o for document analysis, GPT-4o-mini for conversations
 - **PDF Processing**: PyPDF2, pdfplumber, PyMuPDF for text extraction
 - **Validation**: Pydantic for request/response validation
 - **Logging**: Structured logging with structlog
@@ -461,7 +461,7 @@ for page_num in range(doc.page_count):
 
 ### LLM-Based Content Analysis
 
-**Single-pass processing** using **GPT-4-turbo-preview**:
+**Single-pass processing** using **GPT-4o**:
 - **Temperature 0.3** for consistent technical analysis
 - **8KB content limit** per document for cost efficiency
 - **Structured extraction** of PLC-relevant specifications
@@ -478,7 +478,7 @@ for page_num in range(doc.page_count):
 - **OCR integration** for scanned PDFs and image-based content
 - **Smart context re-injection** when initial analysis seems incomplete
 - **Chunked analysis** for large documents with section-wise processing
-- **Image/diagram extraction** using GPT-4-Vision for circuit diagrams
+- **Image/diagram extraction** using GPT-4o-Vision for circuit diagrams
 - **Multi-language support** for German/Japanese technical documentation
 
 ## Code Library (WIP) 🔧
@@ -560,10 +560,32 @@ POST /api/v1/library/upload
 
 ### Testing
 
+#### Cost-Efficient Testing 🪙
+For frequent testing without high OpenAI costs:
+```bash
+# Use efficient test suite (80% cost reduction)
+TESTING=true python scripts/test_4_stage_system_efficient.py
+
+# Test MCQ functionality
+TESTING=true python scripts/test_mcq.py
+```
+
+#### Comprehensive Testing
+For full coverage (higher cost):
+```bash
+# Full test suite
+python scripts/test_4_stage_system.py
+
+# Test all endpoints
+python scripts/test_all_endpoints.py
+```
+
 Run the Code Library API test suite:
 ```bash
 python scripts/test_code_library_api.py
 ```
+
+> 💡 **Cost Tip**: Set `TESTING=true` to use gpt-4o-mini with reduced token limits. See [COST_OPTIMIZATION.md](COST_OPTIMIZATION.md) for details.
 
 ## Development
 
@@ -646,7 +668,7 @@ Using Swagger: visit `http://localhost:8000/docs`, open `POST /api/v1/ai/chat`, 
 ```json
 {
   "user_prompt": "Explain emergency stop logic for a conveyor",
-  "model": "gpt-5-nano",
+  "model": "gpt-4o-mini",
   "temperature": 1.0,
   "max_tokens": 128
 }
@@ -654,7 +676,7 @@ Using Swagger: visit `http://localhost:8000/docs`, open `POST /api/v1/ai/chat`, 
 
 Using curl:
 ```bash
-curl -X POST "http://localhost:8000/api/v1/ai/chat" -H "Content-Type: application/json" -d '{"user_prompt":"Say hi","model":"gpt-5-nano","max_tokens":64}'
+curl -X POST "http://localhost:8000/api/v1/ai/chat" -H "Content-Type: application/json" -d '{"user_prompt":"Say hi","model":"gpt-4o-mini","max_tokens":64}'
 ```
 
 5. If the target model rejects a parameter (for example, if you accidentally pass `max_tokens` to an o1-series model), the API will return HTTP 400 with a JSON detail indicating the offending parameter and an explanation. Example response:
@@ -683,7 +705,7 @@ async function sendPrompt(prompt) {
   const resp = await fetch("https://your-backend.example.com/api/v1/ai/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_prompt: prompt, model: "gpt-5-nano" })
+    body: JSON.stringify({ user_prompt: prompt, model: "gpt-4o-mini" })
   });
 
   if (!resp.ok) throw new Error(`API error: ${resp.status}`);
@@ -733,7 +755,7 @@ Endpoints (detailed)
 - Description: Send a free-form prompt to a supported LLM and return a text response and usage information.
 - Request JSON fields:
   - user_prompt: string (required)
-  - model: string (optional, default gpt-5-nano)
+  - model: string (optional, default gpt-4o-mini)
   - temperature: number (0.0 - 2.0) — some models only support default values; parameter errors will be returned as 400.
   - max_tokens (legacy): integer — legacy alias for `max_completion_tokens`
   - max_completion_tokens: integer — preferred field for completion limits
@@ -742,7 +764,7 @@ Endpoints (detailed)
 ```json
 {
   "user_prompt": "Explain emergency stop logic for a conveyor",
-  "model": "gpt-5-nano",
+  "model": "gpt-4o-mini",
   "temperature": 1.0,
   "max_completion_tokens": 128
 }
@@ -750,7 +772,7 @@ Endpoints (detailed)
 - Example response:
 ```json
 {
-  "model": "gpt-5-nano",
+  "model": "gpt-4o-mini",
   "content": "...generated text...",
   "usage": {"prompt_tokens": 10, "completion_tokens": 64, "total_tokens": 74}
 }
@@ -790,7 +812,7 @@ Curl (AI chat):
 ```bash
 curl -s -X POST "http://localhost:8000/api/v1/ai/chat" \
   -H "Content-Type: application/json" \
-  -d '{"user_prompt":"Say hi","model":"gpt-5-nano","max_tokens":64}'
+  -d '{"user_prompt":"Say hi","model":"gpt-4o-mini","max_tokens":64}'
 ```
 
 JavaScript (browser / frontend example):
@@ -863,7 +885,7 @@ Content-Type: application/json
 {
   "conversation_id": "optional-existing-id",
   "message": "I need to control a conveyor belt with emergency stops",
-  "force_stage": "requirements_gathering" // optional override
+  "force_stage": "project_kickoff" // optional override
 }
 ```
 
@@ -871,9 +893,9 @@ Content-Type: application/json
 ```json
 {
   "conversation_id": "uuid-string",
-  "stage": "requirements_gathering",
+  "stage": "project_kickoff",
   "response": "I'll help you design a conveyor belt control system...",
-  "next_stage": "qa_clarification",
+  "next_stage": "gather_requirements",
   "stage_progress": { "requirements_identified": 2, "confidence": 0.7 },
   "suggested_actions": [
     "Provide conveyor speed requirements",
@@ -915,7 +937,7 @@ Content-Type: application/json
 
 {
   "user_prompt": "Explain PLC ladder logic basics",
-  "model": "gpt-4",
+  "model": "gpt-4o-mini",
   "temperature": 0.7,
   "max_completion_tokens": 512
 }
@@ -924,7 +946,7 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "model": "gpt-4",
+  "model": "gpt-4o-mini",
   "content": "PLC ladder logic is a programming language...",
   "usage": {
     "prompt_tokens": 15,
@@ -1008,10 +1030,10 @@ async function transitionStage(conversationId: string, targetStage: string) {
 // Stage indicators
 const StageIndicator = ({ currentStage }: { currentStage: string }) => {
   const stages = [
-    { key: 'requirements_gathering', label: 'Requirements', icon: '📝' },
-    { key: 'qa_clarification', label: 'Clarification', icon: '❓' },
+    { key: 'project_kickoff', label: 'Kickoff', icon: '�' },
+    { key: 'gather_requirements', label: 'Requirements', icon: '📝' },
     { key: 'code_generation', label: 'Generation', icon: '⚙️' },
-    { key: 'refinement_testing', label: 'Refinement', icon: '🔧' }
+    { key: 'refinement_testing', label: 'Testing & Refinement', icon: '🔧' }
   ];
   
   return (
@@ -1077,7 +1099,7 @@ async function apiCall(url: string, options: RequestInit) {
 ```
     ```json
     {
-      "model": "gpt-5-nano",
+      "model": "gpt-4o-mini",
       "content": "string",
       "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
     }

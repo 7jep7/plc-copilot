@@ -41,5 +41,5 @@ def test_ai_chat_endpoint():
     assert resp.status_code == 200
     data = resp.json()
     assert data["content"] == "Hello from dummy model"
-    assert data["model"] == "gpt-5-nano"
+    assert data["model"] == "gpt-4o-mini"
     assert "usage" in data

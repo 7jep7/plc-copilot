@@ -19,7 +19,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Live OpenAI smoke test (uses app OpenAIService)")
     parser.add_argument("--prompt", "-p", default="Say hello and report the model name", help="User prompt to send")
-    parser.add_argument("--model", "-m", default="gpt-5-nano", help="Model to use")
+    parser.add_argument("--model", "-m", default="gpt-4o-mini", help="Model to use")
     parser.add_argument("--temperature", "-t", type=float, default=1.0, help="Temperature to use")
     parser.add_argument("--max-tokens", type=int, default=None, help="Legacy max_tokens (will be mapped)")
     parser.add_argument("--max-completion-tokens", type=int, default=None, help="Preferred max_completion_tokens")

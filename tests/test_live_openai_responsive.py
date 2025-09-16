@@ -14,7 +14,7 @@ async def test_openai_service_responsive():
 
     class Req:
         user_prompt = "Hello from test - please respond with a short message and the model name"
-        model = "gpt-5-nano"
+        model = "gpt-4o-mini"
         # Use model-default friendly temperature to avoid unsupported_value errors
         temperature = 1.0
         max_tokens = 64

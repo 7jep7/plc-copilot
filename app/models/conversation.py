@@ -19,7 +19,7 @@ class Conversation(Base):
     conversation_id = Column(String, unique=True, nullable=False, index=True)
     user_id = Column(String, nullable=True, index=True)
     
-    current_stage = Column(Enum(ConversationStage), nullable=False, default=ConversationStage.REQUIREMENTS_GATHERING)
+    current_stage = Column(Enum(ConversationStage), nullable=False, default=ConversationStage.PROJECT_KICKOFF)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

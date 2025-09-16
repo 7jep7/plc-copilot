@@ -120,7 +120,7 @@ class APITester:
             "/ai/chat",
             data={
                 "user_prompt": "Hello, can you help me with PLC programming?",
-                "model": "gpt-5-nano",
+                "model": "gpt-4o-mini",
                 "temperature": 1.0
             },
             description="AI chat completion"

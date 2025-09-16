@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, Union
+from app.core.models import ModelConfig
 
 
 class ChatRequest(BaseModel):
     user_prompt: str
-    model: Optional[str] = "gpt-5-nano"
+    model: Optional[str] = ModelConfig.CONVERSATION_MODEL
     temperature: float = 1.0
     max_completion_tokens: Optional[int] = Field(
         default=512, 
@@ -14,7 +15,7 @@ class ChatRequest(BaseModel):
     )
     stage: Optional[str] = Field(
         default=None,
-        description="Optional conversation stage for stage-specific prompts (requirements_gathering, qa_clarification, code_generation, refinement_testing)"
+        description="Optional conversation stage for stage-specific prompts (project_kickoff, gather_requirements, code_generation, refinement_testing)"
     )
     conversation_id: Optional[str] = Field(
         default=None,

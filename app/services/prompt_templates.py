@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from app.schemas.conversation import ConversationStage, ConversationState, ConversationMessage
+from app.core.models import ModelConfig
 
 
 class PromptTemplate(ABC):
@@ -20,11 +21,7 @@ class PromptTemplate(ABC):
     
     def get_model_config(self) -> Dict[str, Any]:
         """Get model configuration for this stage."""
-        return {
-            "model": "gpt-4",
-            "temperature": 1.0,
-            "max_completion_tokens": 1024
-        }
+        return ModelConfig.CONVERSATION_CONFIG
 
 
 class RequirementsGatheringTemplate(PromptTemplate):
@@ -83,11 +80,7 @@ RESPONSE FORMAT:
         return f"User Message: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
-        return {
-            "model": "gpt-4",
-            "temperature": 1.0,
-            "max_completion_tokens": 1024
-        }
+        return ModelConfig.CONVERSATION_CONFIG
 
 
 class QAClarificationTemplate(PromptTemplate):
@@ -104,10 +97,25 @@ CLARIFICATION FOCUS:
 - Integration with existing systems
 - Specific PLC programming requirements
 
+QUESTION TYPES:
+1. **Open Questions**: When you need detailed explanations or custom values
+2. **Multiple Choice Questions (MCQ)**: When there are standard options to choose from
+
+For MCQ questions, format them as:
+**Question**: [Your question here]
+**Options**:
+A) [Option 1]
+B) [Option 2]
+C) [Option 3]
+D) Other (please specify)
+
 RESPONSE FORMAT:
 ## Technical Clarification
 
-[Your focused questions and clarifications]
+[Your focused questions and clarifications - mix of open questions and MCQ as appropriate]
+
+**Follow-up Actions:**
+- [What you'll do with the answers]
 """
 
         # Add document context if available
@@ -160,11 +168,7 @@ RESPONSE FORMAT:
         return f"Generation Request: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
-        return {
-            "model": "gpt-4",
-            "temperature": 1.0,
-            "max_completion_tokens": 2048
-        }
+        return ModelConfig.CODE_GENERATION_CONFIG
 
 
 class RefinementTestingTemplate(PromptTemplate):
@@ -201,19 +205,15 @@ RESPONSE FORMAT:
         return f"Refinement Request: {message}"
     
     def get_model_config(self) -> Dict[str, Any]:
-        return {
-            "model": "gpt-4",
-            "temperature": 1.0,
-            "max_completion_tokens": 1536
-        }
+        return ModelConfig.REFINEMENT_CONFIG
 
 
 class PromptTemplateFactory:
     """Factory for creating stage-specific prompt templates."""
     
     _templates = {
-        ConversationStage.REQUIREMENTS_GATHERING: RequirementsGatheringTemplate,
-        ConversationStage.QA_CLARIFICATION: QAClarificationTemplate,
+        ConversationStage.PROJECT_KICKOFF: RequirementsGatheringTemplate,
+        ConversationStage.GATHER_REQUIREMENTS: QAClarificationTemplate,
         ConversationStage.CODE_GENERATION: CodeGenerationTemplate,
         ConversationStage.REFINEMENT_TESTING: RefinementTestingTemplate,
     }

@@ -52,7 +52,7 @@ def test_service_uses_max_completion_tokens():
 
     class Req:
         user_prompt = "hi"
-        model = "gpt-5-nano"
+        model = "gpt-4o-mini"
         temperature = 0.5
         max_tokens = 123
 
