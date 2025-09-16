@@ -53,6 +53,10 @@ Create the copilot for Programmable Logic Controllers. Automate automating. Prog
 - **Background task processing** with Celery
 - **Comprehensive error handling** and validation
 
+### Rate Limiting & Cost Management 💡
+
+**MVP Cost Optimization**: The system includes intelligent OpenAI model cascade fallback to manage costs while using free hackathon credits. Models are tried in order of cost-effectiveness: `gpt-4o-mini` → `gpt-3.5-turbo` → `gpt-4o`. The system includes session-based memory and daily reset logic, with email notifications when rate limits are reached (once per session). This temporary solution avoids upgrading to OpenAI Tier 1 until natural usage reaches the $5 threshold.
+
 ## Quick Start
 
 ### Prerequisites

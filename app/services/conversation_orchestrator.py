@@ -210,6 +210,9 @@ class ConversationOrchestrator:
         
         # Call OpenAI with structured messages
         try:
+            # Create a request object that includes conversation context
+            llm_request.conversation_id = conversation.conversation_id  # Add conversation ID for fallback tracking
+            
             response_content, usage = await self.openai_service.chat_completion(
                 llm_request, 
                 messages=messages
