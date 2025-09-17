@@ -390,7 +390,7 @@ class ContextProcessingService:
         if context.device_constants:
             score += 0.3  # Base score for having any devices
             # Bonus for nested structure complexity
-            total_keys = sum(len(self._flatten_dict(context.device_constants).keys()))
+            total_keys = len(self._flatten_dict(context.device_constants).keys())
             if total_keys > 5:
                 score += 0.2
         
