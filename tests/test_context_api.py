@@ -183,7 +183,40 @@ class TestContextProcessingService:
 
     @pytest.mark.asyncio
     async def test_code_generation_stage(self, context_service, sample_context):
-        """Test Structured Text code generation."""
+        """Test Structured Text code generation with proper JSON response."""
+        mock_code_response = Mock()
+        mock_code_response.content = """{
+    "updated_context": {
+        "device_constants": {},
+        "information": "Generated PLC code for conveyor control system"
+    },
+    "chat_message": "I've generated the Structured Text code for your conveyor system.",
+    "is_mcq": false,
+    "mcq_question": null,
+    "mcq_options": [],
+    "is_multiselect": false,
+    "generated_code": "PROGRAM ConveyorControl\\nVAR\\n    StartButton : BOOL;\\n    StopButton : BOOL;\\n    MotorRun : BOOL;\\nEND_VAR\\n\\n// Main logic\\nMotorRun := StartButton AND NOT StopButton;\\n\\nEND_PROGRAM"
+}"""
+
+        context_service.openai_service.chat_completion.return_value = mock_code_response
+
+        request = ContextUpdateRequest(
+            current_context=sample_context,
+            current_stage=Stage.CODE_GENERATION
+        )
+
+        response = await context_service.process_context_update(request)
+
+        assert response.current_stage == Stage.CODE_GENERATION  # Stage doesn't auto-transition
+        assert response.generated_code is not None
+        assert "PROGRAM ConveyorControl" in response.generated_code
+        assert "MotorRun" in response.generated_code
+        assert response.gathering_requirements_estimated_progress is None  # Not in requirements stage
+
+    @pytest.mark.asyncio
+    async def test_code_generation_non_json_fallback(self, context_service, sample_context):
+        """Test that non-JSON responses during CODE_GENERATION are handled with retry, not auto-transition."""
+        # Mock a raw code response (non-JSON) for both calls
         mock_code_response = Mock()
         mock_code_response.content = """
 PROGRAM ConveyorControl
@@ -209,11 +242,11 @@ END_PROGRAM
 
         response = await context_service.process_context_update(request)
 
-        assert response.current_stage == Stage.REFINEMENT_TESTING  # Auto-transition
-        assert response.generated_code is not None
-        assert "PROGRAM ConveyorControl" in response.generated_code
-        assert "MotorRun" in response.generated_code
-        assert response.gathering_requirements_estimated_progress is None  # Not in requirements stage
+        # Should stay in CODE_GENERATION stage and return error message
+        assert response.current_stage == Stage.CODE_GENERATION
+        assert response.generated_code is None
+        assert "error processing your request" in response.chat_message.lower()
+        assert response.is_mcq is False
 
     @pytest.mark.asyncio
     async def test_refinement_testing_stage(self, context_service, sample_context):

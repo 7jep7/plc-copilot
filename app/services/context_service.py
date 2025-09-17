@@ -205,28 +205,62 @@ class ContextProcessingService:
                 response_content = response_content[:-3]  # Remove ```
             response_content = response_content.strip()
             
-            # Try to parse JSON. If this fails and we're in CODE_GENERATION stage,
-            # assume the model returned raw code and treat it as generated_code.
+            # Try to parse JSON. If this fails, retry with a corrective prompt.
             try:
                 ai_response = json.loads(response_content)
-            except json.JSONDecodeError:
-                if request.current_stage == Stage.CODE_GENERATION:
-                    # Treat the entire response as generated code
-                    return ContextUpdateResponse(
-                        updated_context=request.current_context,
-                        chat_message="",
-                        gathering_requirements_estimated_progress=None,
-                        # transition to refinement/testing because code was produced
-                        current_stage=Stage.REFINEMENT_TESTING,
-                        is_mcq=False,
-                        is_multiselect=False,
-                        mcq_question=None,
-                        mcq_options=[],
-                        generated_code=response_content,
-                        file_extractions=[]
-                    )
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse failed, retrying with corrective prompt. Error: {e}")
+                
+                # Build corrective prompt asking for proper JSON format
+                corrective_prompt = f"""The previous response was not valid JSON. Please provide a response in the exact JSON format required.
+
+Original user request context:
+Stage: {request.current_stage}
+Message: {request.message or 'None'}
+MCQ Responses: {request.mcq_responses or []}
+
+CRITICAL: Return ONLY valid JSON in the exact format specified in the original prompt. No additional text, no markdown formatting, just pure JSON.
+
+Response must include: updated_context, chat_message, and all other required fields for stage {request.current_stage}."""
+
+                # Retry the LLM call with corrective prompt
+                retry_call = self.openai_service.chat_completion(
+                    chat_request,
+                    messages=[{"role": "user", "content": corrective_prompt}]
+                )
+
+                # Resolve retry call
+                if hasattr(retry_call, '__await__'):
+                    retry_raw = await retry_call
                 else:
-                    raise
+                    retry_raw = retry_call
+
+                # Normalize retry response
+                retry_resp = None
+                if isinstance(retry_raw, (list, tuple)) and len(retry_raw) >= 1:
+                    retry_resp = retry_raw[0]
+                elif hasattr(retry_raw, 'content'):
+                    retry_resp = retry_raw.content
+                elif isinstance(retry_raw, str):
+                    retry_resp = retry_raw
+                else:
+                    retry_resp = str(retry_raw)
+
+                # Clean and try parsing retry response
+                retry_content = retry_resp.strip() if isinstance(retry_resp, str) else str(retry_resp)
+                if retry_content.startswith("```json"):
+                    retry_content = retry_content[7:]
+                if retry_content.endswith("```"):
+                    retry_content = retry_content[:-3]
+                retry_content = retry_content.strip()
+
+                try:
+                    ai_response = json.loads(retry_content)
+                    logger.info("Corrective prompt succeeded, parsed JSON response")
+                except json.JSONDecodeError as retry_error:
+                    logger.error(f"Corrective prompt also failed: {retry_error}")
+                    # Fall back to error response instead of bad stage transition
+                    raise ValueError(f"LLM failed to return valid JSON after retry. Original error: {e}, Retry error: {retry_error}")
             
             # Extract updated context
             updated_context_data = ai_response.get("updated_context", {})
@@ -319,7 +353,7 @@ class ContextProcessingService:
                 file_extractions=file_extractions
             )
             
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to parse comprehensive AI response: {e}")
             logger.error(f"Raw response (first 1000 chars): {response[:1000]}")
             # Fallback response
