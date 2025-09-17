@@ -15,17 +15,17 @@
 - [Features](#features)
 - [Quick Start](#quick-start)
 
-### API Documentation
+### For Developers
+- [Frontend Quick Start](FRONTEND_QUICK_START.md) ⭐
 - [API Reference](#api-reference)
 - [User Workflow](#user-workflow)
-- [Code Library](#code-library)
 
 ### Operations
 - [Deployment](#deployment)
 - [Development](#development)
 
 ### Integration
-- [Frontend Integration](#frontend-integration)
+- [Code Library](#code-library)
 - [Dependencies](#dependencies)
 
 ## Vision
@@ -1353,11 +1353,15 @@ Content-Type: application/json
 
 ## Frontend Integration
 
-For comprehensive frontend integration details, including MCQ handling, stage management, and best practices, see the **[Frontend Integration Guide](./FRONTEND_INTEGRATION_GUIDE.md)**.
+**🚀 Quick Start:** See the [Frontend Quick Start Guide](FRONTEND_QUICK_START.md) for a concise integration guide.
 
-### Quick Integration Summary
+**📖 Complete Documentation:** Available at http://localhost:8000/docs
 
-### 📋 Frontend Integration Guide
+### Key Points
+- **One Endpoint:** All interactions through `POST /api/v1/context/update`
+- **Transparent Context:** No hidden state, everything visible and editable
+- **File Processing:** Upload PDFs and get immediate analysis
+- **MCQ Support:** Structured questions for faster data gathering
 
 #### Recommended Workflow for React/Vue/Angular
 
