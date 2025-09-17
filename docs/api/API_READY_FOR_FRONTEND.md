@@ -1,19 +1,23 @@
-# PLC-Copilot API Endpoint Documentation and Status Report
+# PLC-Copilot API: Context-Centric Architecture
 
 ## 📋 Executive Summary
 
 ✅ **API Server Status**: Running and functional on http://localhost:8000  
 ✅ **Database Configuration**: SQLite configured and initialized  
-✅ **Core Endpoints**: Working with proper request/response handling  
+✅ **Core Endpoints**: Context-centric unified workflow  
 ⚠️ **OpenAI Integration**: Requires valid API key for full functionality  
 📖 **Documentation**: Available at http://localhost:8000/docs  
+
+## 🎯 **NEW ARCHITECTURE: Context-Centric Workflow**
+
+**🌟 BREAKING CHANGE**: The conversation system has been completely replaced with a **unified context-centric API** that provides a single endpoint for all user interactions.
 
 ## 🔌 API Endpoints Ready for Frontend Integration
 
 ### Base Configuration
 - **Base URL**: `http://localhost:8000`
 - **API Prefix**: `/api/v1`
-- **Content-Type**: `application/json`
+- **Content-Type**: `multipart/form-data` (for context updates with file support)
 
 ### Core System Endpoints
 
@@ -29,134 +33,95 @@ GET /
 ```
 **Response**: Service information and docs link
 
-### 🤖 AI Chat Endpoints
+---
 
-#### Chat Completion
+## 🌟 **PRIMARY API: Context-Centric Workflow**
+
+### **The ONE Endpoint to Rule Them All**
+
+#### Context Update (Unified Workflow)
+```http
+POST /api/v1/context/update
+Content-Type: multipart/form-data
+
+# Form fields:
+message: "Your message or response"
+mcq_responses: ["Selected", "Options"]  // JSON array as string
+current_context: {"device_constants": {}, "information": ""}  // JSON as string
+current_stage: "gathering_requirements"  // or "code_generation", "refinement_testing"
+files: [file1.pdf, file2.pdf]  // Optional file uploads
+```
+
+**This single endpoint handles:**
+- ✅ **Text messages** and user responses  
+- ✅ **Multiple choice question (MCQ)** answers
+- ✅ **File uploads** with immediate PDF processing
+- ✅ **Stage management** and transitions
+- ✅ **Context updates** with AI-driven improvements
+- ✅ **Progress tracking** during requirements gathering
+- ✅ **Code generation** when ready
+
+**Example Response**:
+```json
+{
+  "updated_context": {
+    "device_constants": {
+      "ConveyorMotor": {
+        "Type": "AC Servo",
+        "Power": "2.5kW",
+        "Voltage": "400V"
+      },
+      "SafetySystems": {
+        "EmergencyStops": {"Count": 2},
+        "LightCurtains": {"Height": "1800mm"}
+      }
+    },
+    "information": "## Project Requirements\n- Conveyor belt control system\n- Safety requirements: emergency stops\n- Speed control needed"
+  },
+  "chat_message": "Great! I've added the motor specifications. What safety features do you need?",
+  "current_stage": "gathering_requirements",
+  "progress": 0.6,
+  "is_mcq": true,
+  "mcq_question": "What safety features do you require?",
+  "mcq_options": [
+    "Emergency stop buttons only",
+    "Light curtains for perimeter protection", 
+    "Safety mats for operator zones",
+    "Comprehensive safety package"
+  ],
+  "is_multiselect": false,
+  "generated_code": null
+}
+```
+
+---
+
+## 🔧 **Utility Endpoints** (Optional/Specialized)
+
+### 🤖 AI Chat (Simple Stateless)
 ```http
 POST /api/v1/ai/chat
 Content-Type: application/json
 
 {
-  "user_prompt": "Your question about PLC programming",
+  "user_prompt": "Simple question about PLC programming",
   "model": "gpt-4o-mini",
   "temperature": 1.0,
-  "max_tokens": 512
+  "max_completion_tokens": 512
 }
 ```
 
+**Use Case**: Simple Q&A without context tracking  
 **Status**: ✅ Working (requires valid OpenAI API key)
 
-### 💬 Conversation System Endpoints
-
-#### Start/Continue Conversation
-```http
-POST /api/v1/conversations/
-Content-Type: application/json
-
-{
-  "conversation_id": "optional-existing-id",
-  "message": "I need help creating a PLC program for a conveyor belt system",
-  "attachments": ["optional-file-ids"],
-  "force_stage": "optional-stage",
-  "context": {}
-}
-```
-
-**Response Example**:
-```json
-{
-  "conversation_id": "uuid-string",
-  "stage": "project_kickoff",
-  "response": "AI response text",
-  "next_stage": "gather_requirements",
-  "gathering_requirements_estimated_progress": 0.0,
-  "stage_progress": {"requirements_identified": 0, "confidence": 0.0},
-  "suggested_actions": ["Provide more details...", "Upload documentation..."],
-  "is_mcq": false,
-  "mcq_question": null,
-  "mcq_options": [],
-  "is_multiselect": false,
-  "generated_code": null,
-  "metadata": {}
-}
-```
-
-**Status**: ✅ Working
-
-#### Get Conversation State
-```http
-GET /api/v1/conversations/{conversation_id}
-```
-
-**Status**: ✅ Working
-
-#### Get Conversation Messages
-```http
-GET /api/v1/conversations/{conversation_id}/messages
-```
-
-**Status**: ✅ Working
-
-#### List All Conversations
-```http
-GET /api/v1/conversations/
-```
-
-**Status**: ✅ Working
-
-#### Get Stage Suggestions
-```http
-GET /api/v1/conversations/{conversation_id}/stage/suggestions
-```
-
-**Status**: ✅ Working
-
-#### Manual Stage Transition
-```http
-POST /api/v1/conversations/{conversation_id}/stage
-Content-Type: application/json
-
-{
-  "conversation_id": "string",
-  "target_stage": "gather_requirements",
-  "reason": "Manual override",
-  "force": false
-}
-```
-
-**Status**: ✅ Working
-
-#### Reset Conversation
-```http
-POST /api/v1/conversations/{conversation_id}/reset?target_stage=project_kickoff
-```
-
-**Status**: ✅ Working
-
-#### Delete Conversation
-```http
-DELETE /api/v1/conversations/{conversation_id}
-```
-
-**Status**: ✅ Working
-
-#### System Health Check
-```http
-GET /api/v1/conversations/health
-```
-
-**Status**: ⚠️ Path needs verification
-
-### 🔧 PLC Code Generation Endpoints
-
-#### Generate PLC Code
+### 🔧 PLC Code Generation (CRUD Operations)
 ```http
 POST /api/v1/plc/generate
 Content-Type: application/json
 
 {
   "user_prompt": "Create a ladder logic program for a simple traffic light controller",
-  "language": "ladder_logic",
+  "language": "ladder_logic", 
   "name": "Traffic Light Controller",
   "description": "Simple traffic light control system",
   "temperature": 1.0,
@@ -166,265 +131,161 @@ Content-Type: application/json
 }
 ```
 
-**Status**: ✅ Schema validated (requires valid OpenAI API key)
+**Use Case**: Direct PLC code generation and CRUD operations  
+**Status**: ✅ Working (requires valid OpenAI API key)
 
-#### List PLC Codes
-```http
-GET /api/v1/plc/?skip=0&limit=100&language=ladder_logic
-```
+**Additional PLC endpoints**: GET, PUT, DELETE `/api/v1/plc/{code_id}`, validation, compilation
 
-**Status**: ✅ Working
-
-#### Get Specific PLC Code
-```http
-GET /api/v1/plc/{code_id}
-```
-
-**Status**: ✅ Working
-
-#### Update PLC Code
-```http
-PUT /api/v1/plc/{code_id}
-```
-
-**Status**: ✅ Working
-
-#### Delete PLC Code
-```http
-DELETE /api/v1/plc/{code_id}
-```
-
-**Status**: ✅ Working
-
-#### Validate PLC Code
-```http
-POST /api/v1/plc/{code_id}/validate
-```
-
-**Status**: ✅ Working
-
-#### Compile PLC Code
-```http
-POST /api/v1/plc/{code_id}/compile
-```
-
-**Status**: ✅ Working
-
-### 🔗 Digital Twin Endpoints
-
-#### Create Digital Twin
+### 🔗 Digital Twin Simulation
 ```http
 POST /api/v1/digital-twin/
 Content-Type: application/json
 
 {
   "name": "Test Conveyor System",
-  "description": "Test digital twin for API validation",
+  "description": "Test digital twin for API validation", 
   "simulation_type": "conveyor",
   "configuration": {"belt_speed": 1.5, "length": 10.0}
 }
 ```
 
-**Status**: ✅ Schema validated
-
-#### List Digital Twins
-```http
-GET /api/v1/digital-twin/?skip=0&limit=100&simulation_type=conveyor
-```
-
+**Use Case**: PLC code testing and simulation  
 **Status**: ✅ Working
 
-#### Get Digital Twin
+### 📚 Code Library (Templates)
 ```http
-GET /api/v1/digital-twin/{twin_id}
+GET /api/v1/library/
 ```
 
+**Use Case**: Access to pre-built PLC code templates  
 **Status**: ✅ Working
 
-#### Delete Digital Twin
-```http
-DELETE /api/v1/digital-twin/{twin_id}
-```
+---
 
-**Status**: ✅ Working
+## 🎯 **Frontend Integration Guide**
 
-#### Test PLC Code in Digital Twin
-```http
-POST /api/v1/digital-twin/{twin_id}/test
-Content-Type: application/json
+### **Context Tab Implementation** 
+Your frontend should implement a **context tab** that displays the current context in an editable format:
 
-{
-  "plc_code_id": "uuid-string",
-  "test_name": "Conveyor Speed Test",
-  "test_parameters": {},
-  "expected_outcomes": {},
-  "simulation_duration": 10.0,
-  "real_time_factor": 1.0
+```typescript
+interface ProjectContext {
+  device_constants: {
+    [deviceName: string]: {
+      [property: string]: string | number | object
+    }
+  };
+  information: string; // Markdown format
+}
+
+interface ContextState {
+  context: ProjectContext;
+  stage: 'gathering_requirements' | 'code_generation' | 'refinement_testing';
+  progress?: number; // 0.0-1.0 during requirements gathering
+  is_mcq: boolean;
+  mcq_question?: string;
+  mcq_options?: string[];
+  is_multiselect?: boolean;
 }
 ```
 
-**Status**: ✅ Schema validated
+### **Recommended Workflow**
+1. **Initialize**: Start with empty context and `gathering_requirements` stage
+2. **Context Tab**: Show device_constants as JSON editor + information as markdown
+3. **Chat Interface**: Regular chat with MCQ support
+4. **File Upload**: Drag & drop PDF processing
+5. **Progress Bar**: Show progress during requirements gathering
+6. **Stage Transitions**: Automatic or user-controlled
+7. **Code Display**: Show generated Structured Text when ready
 
-#### Get Simulation Runs
-```http
-GET /api/v1/digital-twin/{twin_id}/runs?skip=0&limit=50
+### **Example Implementation**
+```typescript
+async function updateContext(
+  message?: string,
+  mcqResponses?: string[],
+  files?: File[]
+): Promise<ContextState> {
+  const formData = new FormData();
+  
+  if (message) formData.append('message', message);
+  if (mcqResponses?.length) {
+    formData.append('mcq_responses', JSON.stringify(mcqResponses));
+  }
+  formData.append('current_context', JSON.stringify(currentContext));
+  formData.append('current_stage', currentStage);
+  
+  files?.forEach(file => formData.append('files', file));
+  
+  const response = await fetch('/api/v1/context/update', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return response.json();
+}
 ```
 
-**Status**: ✅ Working
+---
 
-#### Get Specific Simulation Run
-```http
-GET /api/v1/digital-twin/runs/{run_id}
-```
-
-**Status**: ✅ Working
-
-### 📄 Document Management Endpoints
-
-#### Upload Document
-```http
-POST /api/v1/documents/upload
-Content-Type: multipart/form-data
-
-file=@document.pdf
-description=Optional description
-tags=tag1,tag2,tag3
-```
-
-**Status**: ✅ Working
-
-#### List Documents
-```http
-GET /api/v1/documents/?skip=0&limit=100&status_filter=processed
-```
-
-**Status**: ✅ Working
-
-#### Get Document
-```http
-GET /api/v1/documents/{document_id}
-```
-
-**Status**: ✅ Working
-
-#### Update Document
-```http
-PUT /api/v1/documents/{document_id}
-```
-
-**Status**: ✅ Working
-
-#### Delete Document
-```http
-DELETE /api/v1/documents/{document_id}
-```
-
-**Status**: ✅ Working
-
-#### Process Document
-```http
-POST /api/v1/documents/{document_id}/process
-```
-
-**Status**: ✅ Working
-
-#### Get Extracted Data
-```http
-GET /api/v1/documents/{document_id}/extracted-data
-```
-
-**Status**: ✅ Working
-
-## 🚀 Getting Started for Frontend Integration
+## 🚀 **Getting Started**
 
 ### 1. Environment Setup
 ```bash
 # Set required environment variables
-export DATABASE_URL="sqlite:///./test.db"
+export DATABASE_URL="sqlite:///./test.db" 
 export SECRET_KEY="your-secret-key"
 export OPENAI_API_KEY="your-openai-api-key"
 
 # Start the server
-cd /path/to/plc-copilot
 conda activate plc-copilot
-PYTHONPATH=/path/to/plc-copilot python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 2. Key Features for Frontend
+### 2. Key Features
+- **🎯 Single endpoint** for all user interactions
+- **📄 Immediate file processing** - no separate upload step
+- **🤖 AI-driven context updates** - keeps information concise and relevant
+- **📊 Progress tracking** - automatic requirements completion calculation
+- **🔄 Stage management** - user can control workflow transitions
+- **💬 MCQ support** - structured input collection
 
-#### Multi-Stage Conversation Flow
-The conversation system supports these stages:
-- `project_kickoff`: Initial user input and project analysis
-- `gather_requirements`: Follow-up questions and clarifications (MCQ support)
-- `code_generation`: PLC code generation based on requirements
-- `refinement_testing`: Code refinement and testing feedback
-- `completed`: Final stage
-
-#### Error Handling
-All endpoints return structured error responses:
-```json
-{
-  "detail": "Error description",
-  "type": "error_type",
-  "param": "parameter_name"
-}
-```
-
-#### Pagination
-List endpoints support pagination:
-- `skip`: Number of items to skip
-- `limit`: Maximum items to return
-
-### 3. OpenAPI Documentation
-Full interactive documentation available at:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/api/v1/openapi.json
-
-### 4. Database Persistence
-- SQLite database automatically initialized
-- All conversations, PLC codes, digital twins, and documents are persisted
-- Database migrations handled by Alembic
-
-## ⚠️ Important Notes for Frontend Development
-
-1. **OpenAI API Key**: Set a valid OpenAI API key for full AI functionality
-2. **CORS**: CORS is configured for development - update for production
-3. **File Uploads**: Document uploads use multipart/form-data
-4. **Conversation IDs**: UUIDs are auto-generated if not provided
-5. **Stage Transitions**: The system auto-detects stage transitions but allows manual override
-6. **Rate Limiting**: Consider implementing rate limiting for production
-
-## 🔧 Testing Commands
-
+### 3. Testing the Context API
 ```bash
-# Test basic connectivity
-curl http://localhost:8000/health
+# Basic context update
+curl -X POST http://localhost:8000/api/v1/context/update \
+  -F 'message=I need help with a conveyor system' \
+  -F 'current_context={"device_constants": {}, "information": ""}' \
+  -F 'current_stage=gathering_requirements'
 
-# Test conversation endpoint
-curl -X POST http://localhost:8000/api/v1/conversations/ \
-  -H "Content-Type: application/json" \
-  -d '{"message": "I need help with PLC programming"}'
+# With file upload
+curl -X POST http://localhost:8000/api/v1/context/update \
+  -F 'message=Process this motor datasheet' \
+  -F 'current_context={"device_constants": {}, "information": ""}' \
+  -F 'current_stage=gathering_requirements' \
+  -F 'files=@motor_spec.pdf'
 
-# Test AI chat endpoint
-curl -X POST http://localhost:8000/api/v1/ai/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_prompt": "Hello, world!"}'
+# MCQ response
+curl -X POST http://localhost:8000/api/v1/context/update \
+  -F 'mcq_responses=["Emergency stop buttons", "Light curtains"]' \
+  -F 'current_context={"device_constants": {...}, "information": "..."}' \
+  -F 'current_stage=gathering_requirements'
 ```
 
-## 📊 Status Summary
+---
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Core API | ✅ Ready | All endpoints functional |
-| Conversation System | ✅ Ready | Multi-stage flow working |
-| PLC Code Generation | ⚠️ Partial | Requires valid OpenAI key |
-| Digital Twin | ✅ Ready | Schema validated |
-| Document Management | ✅ Ready | File upload working |
-| Database Integration | ✅ Ready | SQLite configured |
-| Error Handling | ✅ Ready | Structured responses |
-| API Documentation | ✅ Ready | Interactive docs available |
+## 📊 **Status Summary**
 
-**Ready for Frontend Integration** 🎉
+| Component | Status | Purpose |
+|-----------|--------|---------|
+| **Context API** | ✅ **PRIMARY** | Unified workflow endpoint |
+| AI Chat | ✅ Utility | Simple stateless chat |
+| PLC CRUD | ✅ Utility | Code generation & management |
+| Digital Twin | ✅ Utility | Simulation & testing |
+| Code Library | ✅ Utility | Template access |
+| Database | ✅ Ready | SQLite configured |
+| Documentation | ✅ Ready | Interactive docs at `/docs` |
 
-The API is now ready for your frontend integration. All core endpoints are functional, properly documented, and return consistent JSON responses. The conversation system provides a solid foundation for building an interactive PLC programming assistant.
+## 🎉 **Ready for Frontend Integration!**
+
+The API is now **streamlined and focused** around the context-centric workflow. Your frontend can build a powerful, transparent, and user-friendly interface around the single `/api/v1/context/update` endpoint.
+
+**Key Advantage**: Users can see and edit their context directly, making the AI interaction completely transparent and debuggable! 🌟

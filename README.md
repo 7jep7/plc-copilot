@@ -1,12 +1,12 @@
 # PLC Copilot Backend
 
-> **A FastAPI backend for automating PLC (Programmable Logic Controller) programming and testing.**
+> **A FastAPI backend for automating PLC (Programmable Logic Controller) programming with context-centric AI assistance.**
 
+🎯 **Context-Centric**: Transparent, editable project context eliminates hidden state  
 🤖 **AI-Powered**: Converts natural language requirements into production-ready PLC code  
-📋 **4-Stage Workflow**: Guided conversation from initial idea to refined implementation  
-📄 **Document Intelligence**: Parses technical manuals to extract relevant device information  
-🔧 **Code Library**: Industrial-grade ST code samples with intelligent search and management  
-🚀 **Production Ready**: Deployed on Render.com with comprehensive monitoring and health checks
+� **Immediate Processing**: Upload files and instantly extract device specifications  
+🔧 **Code Library**: Industrial-grade ST code samples with intelligent search  
+🚀 **Production Ready**: Deployed on Render.com with comprehensive monitoring
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@
 ### API Documentation
 - [API Reference](#api-reference)
 - [User Workflow](#user-workflow)
-- [Code Library (WIP)](#code-library-wip)
+- [Code Library](#code-library)
 
 ### Operations
 - [Deployment](#deployment)
@@ -30,33 +30,32 @@
 
 ## Vision
 
-Create the copilot for Programmable Logic Controllers. Automate automating. Program, test, maintain, redeploy robots and any PLC-powered assembly line and industrial process.
+Create the copilot for Programmable Logic Controllers. Automate automating. Program, test, maintain, and redeploy robots and any PLC-powered assembly line and industrial process with complete transparency and user control.
 
 ## Features
 
-### Core Functionality ✅
-1. **🎯 Context-Centric API**: Unified endpoint for all user interactions with intelligent context management
-2. **📄 Immediate File Processing**: Upload PDFs and instantly extract PLC-relevant device specifications
+### Core Architecture ✅
+1. **🎯 Context-Centric Design**: All AI knowledge stored in transparent, editable context objects
+2. **📄 Immediate File Processing**: Upload PDFs and instantly extract PLC-relevant specifications  
 3. **🤖 AI-Powered Code Generation**: Convert natural language and context into production-ready Structured Text
 4. **📊 Smart Progress Tracking**: AI calculates requirements completion automatically
 5. **❓ Intelligent MCQ System**: Structured questions for standardized inputs and faster data gathering
 
-### New Architecture Benefits ⭐
-- **Single API Endpoint**: All interactions through `POST /api/v1/context/update`
-- **Flexible JSON Context**: Supports complex nested device hierarchies
-- **Lean File Processing**: Selective extraction, no file storage required
-- **AI-Driven Stage Management**: Automatic progress inference with user override capability
-- **Context Compression**: Focuses only on PLC-relevant information
+### Architecture Benefits ⭐
+- **Single Integration Point**: All interactions through `POST /api/v1/context/update`
+- **Stateless Operation**: No hidden conversation state to debug
+- **Transparent Context**: Users can see and edit exactly what the AI knows
+- **File Processing**: Documents processed immediately, not stored
+- **Type Safety**: Strong interfaces for reliable integration
 
-### Legacy Features (Maintained) 🔧
-6. **Multi-Stage Conversation System**: Original 4-stage workflow (deprecated but functional)
-7. **Digital Twin Testing**: Simple simulation functionality for code validation
-8. **Code Library & Knowledge Base**: Industrial-grade ST code samples with search capabilities
+### Additional Features 🔧
+6. **Digital Twin Testing**: Simple simulation functionality for code validation
+7. **Code Library & Knowledge Base**: Industrial-grade ST code samples with search capabilities
+8. **Direct AI Chat**: Stateless chat endpoint for quick questions
 
 ### Technical Features
-- **RESTful API**: Two-tier approach with conversation workflows and simple chat endpoints
-- **Stage-Aware Prompts**: Specialized AI prompts for each conversation stage
-- **Server-Side State Management**: Full conversation tracking and stage transitions
+- **RESTful API**: Context-centric architecture with stateless endpoints
+- **Intelligent Context Management**: AI-driven context updates with user override capability
 - **Production-ready deployment** on Render.com
 - **Structured logging** and health monitoring
 - **Database migrations** with Alembic
@@ -168,37 +167,37 @@ celery -A app.worker worker --loglevel=info
   - Handle user messages, MCQ responses, and file uploads in one request
   - AI-driven progress calculation and stage management
   - Immediate file processing with selective PLC-relevant extraction
+### Main Context API
+- `POST /api/v1/context/update` - **Primary endpoint** for all user interactions
+  - Accepts messages, MCQ responses, file uploads, and context updates
   - Returns updated context, chat responses, MCQs, and generated code
+  - Supports multipart/form-data for file uploads
 
-#### Stage Management
-- `POST /api/v1/context/transition` - Manual stage transitions (optional)
-- `GET /api/v1/context/health` - Health check for context API
-
-### Legacy Endpoints (Deprecated)
-*The following endpoints will be removed in future versions. Use the Context API above.*
-
-### Core Conversation API (Legacy)
-- `POST /api/v1/conversations/` - Start new conversation (4-stage workflow)
-- `PUT /api/v1/conversations/{id}` - Continue conversation with user message
-- `GET /api/v1/conversations/{id}` - Get conversation state and history
-
-### Conversation-Level Document Management (Legacy)
-- `POST /api/v1/conversations/{id}/documents/upload` - Upload PDF to conversation
-- `GET /api/v1/conversations/{id}/documents` - List conversation documents
-- `GET /api/v1/conversations/{id}/documents/{hash}` - Get specific document
-- `DELETE /api/v1/conversations/{id}/documents/{hash}` - Remove document
-
-### Simple Chat API
+### AI Chat API
 - `POST /api/v1/ai/chat` - Stateless chat interaction with AI
+  - Direct questions without context persistence
+  - Useful for quick help and explanations
 
-### Document Management (Global)
-- `POST /api/v1/documents/upload` - Upload and parse PDF manuals
-- `GET /api/v1/documents/` - List uploaded documents
-- `GET /api/v1/documents/{id}` - Get specific document
-- `POST /api/v1/documents/{id}/process` - Process document for PLC context
-- `GET /api/v1/documents/{id}/extracted-data` - Get extracted technical data
+### PLC Code Management
+- `GET /api/v1/plc/codes` - List all generated PLC codes
+- `POST /api/v1/plc/codes` - Create new PLC code entry
+- `GET /api/v1/plc/codes/{id}` - Get specific PLC code
+- `PUT /api/v1/plc/codes/{id}` - Update existing PLC code
+- `DELETE /api/v1/plc/codes/{id}` - Delete PLC code
+- `POST /api/v1/plc/generate` - Generate PLC code from context
 
-### PLC Code Generation
+### Digital Twin Management
+- `GET /api/v1/digital-twin/configs` - List twin configurations
+- `POST /api/v1/digital-twin/configs` - Create twin configuration
+- `POST /api/v1/digital-twin/simulate` - Run simulation
+
+### Code Library
+- `GET /api/v1/library/examples` - Browse code examples
+- `POST /api/v1/library/search` - Search code library
+
+### System Endpoints
+- `GET /health` - Health check
+- `GET /` - API information
 - `POST /api/v1/plc-code/generate` - Generate PLC code from user prompt
 - `GET /api/v1/plc-code/` - List generated PLC codes
 - `GET /api/v1/plc-code/{id}` - Get specific PLC code
