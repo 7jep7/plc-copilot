@@ -60,92 +60,126 @@ class ContextProcessingService:
         """
         logger.info(f"Processing context update for stage: {request.current_stage}")
         
-        # Start with current context
-        updated_context = request.current_context.model_copy(deep=True)
-        
-        # Process uploaded files first if any
-        file_extractions = []
+        # Extract text from uploaded files (no LLM call yet)
+        extracted_file_texts = []
         if uploaded_files:
             for file_data in uploaded_files:
-                extraction = await self._process_uploaded_file(file_data)
-                file_extractions.append(extraction)
-                
-                # Integrate file extractions into context
-                updated_context = self._integrate_file_extraction(updated_context, extraction)
+                try:
+                    file_bytes = file_data.getvalue()
+                    extracted_text = self._extract_text_from_bytes(file_bytes)
+                    if extracted_text and extracted_text != "PDF processing libraries not available":
+                        extracted_file_texts.append(extracted_text)
+                except Exception as e:
+                    logger.warning(f"Failed to extract text from uploaded file: {e}")
         
-        # Update context with user message and MCQ responses
-        if request.message or request.mcq_responses:
-            updated_context = await self._update_context_with_user_input(
-                updated_context, 
-                request.message, 
-                request.mcq_responses
-            )
+        # Single comprehensive LLM call that handles everything
+        response = await self._process_comprehensive_update(
+            request, 
+            extracted_file_texts
+        )
         
-        # Generate AI response based on stage
-        if request.current_stage == Stage.CODE_GENERATION:
-            return await self._handle_code_generation(updated_context, request.current_stage)
-        elif request.current_stage == Stage.REFINEMENT_TESTING:
-            return await self._handle_refinement_testing(updated_context, request)
-        else:  # GATHERING_REQUIREMENTS
-            return await self._handle_requirements_gathering(updated_context, request)
+        return response
     
-    async def _process_uploaded_file(self, file_data: BytesIO) -> FileProcessingResult:
+    async def _process_comprehensive_update(
+        self,
+        request: ContextUpdateRequest,
+        extracted_file_texts: List[str]
+    ) -> ContextUpdateResponse:
         """
-        Process an uploaded file and extract PLC-relevant information.
+        Single comprehensive LLM call that handles context update, file processing, and response generation.
         
         Args:
-            file_data: File data as BytesIO
+            request: Original context update request
+            extracted_file_texts: Raw text extracted from uploaded files
             
         Returns:
-            Extracted device specifications and information
+            Complete context update response
         """
-        logger.info("Processing uploaded file for PLC-relevant data")
+        # Build comprehensive prompt
+        comprehensive_prompt = self._build_comprehensive_prompt(
+            request.current_context,
+            request.current_stage,
+            request.message,
+            request.mcq_responses,
+            extracted_file_texts
+        )
         
+        # Single LLM call with higher token limit for comprehensive response
+        from app.schemas.openai import ChatRequest
+        chat_request = ChatRequest(
+            user_prompt="",  # Will be overridden by messages
+            model="gpt-4o" if request.current_stage == Stage.CODE_GENERATION else "gpt-4o-mini",
+            temperature=0.3 if request.current_stage == Stage.CODE_GENERATION else 0.7,
+            max_tokens=2048 if request.current_stage == Stage.CODE_GENERATION else 1024
+        )
+        
+        response, usage = await self.openai_service.chat_completion(
+            chat_request,
+            messages=[{"role": "user", "content": comprehensive_prompt}]
+        )
+        
+        # Parse comprehensive response
         try:
-            # Extract text from file using document service
-            # Create a temporary document service instance without DB dependency
-            file_bytes = file_data.getvalue()
+            logger.debug(f"Raw AI response: {response}")
             
-            # Use direct extraction methods
-            extracted_text = self._extract_text_from_bytes(file_bytes)
+            # Strip markdown code blocks if present
+            response_content = response.strip()
+            if response_content.startswith("```json"):
+                response_content = response_content[7:]  # Remove ```json
+            if response_content.endswith("```"):
+                response_content = response_content[:-3]  # Remove ```
+            response_content = response_content.strip()
             
-            # Use AI to extract structured device information
-            extraction_prompt = self._build_file_extraction_prompt(extracted_text)
+            ai_response = json.loads(response_content)
             
-            from app.schemas.openai import ChatRequest
-            request = ChatRequest(
-                user_prompt="",  # Will be overridden by messages
-                model="gpt-4o-mini",
-                temperature=0.3,
-                max_tokens=1024
-            )
-            response, usage = await self.openai_service.chat_completion(
-                request,
-                messages=[{"role": "user", "content": extraction_prompt}]
+            # Extract updated context
+            updated_context_data = ai_response.get("updated_context", {})
+            updated_context = ProjectContext(
+                device_constants=updated_context_data.get("device_constants", request.current_context.device_constants),
+                information=updated_context_data.get("information", request.current_context.information)
             )
             
-            # Parse AI response into structured format
-            try:
-                extracted_data = json.loads(response)
-                return FileProcessingResult(
-                    extracted_devices=extracted_data.get("devices", {}),
-                    extracted_information=extracted_data.get("information", ""),
-                    processing_summary=extracted_data.get("summary", "Processed file successfully")
-                )
-            except json.JSONDecodeError:
-                # Fallback if AI doesn't return valid JSON
-                return FileProcessingResult(
-                    extracted_devices={},
-                    extracted_information=response.content[:500],  # Truncate for brevity
-                    processing_summary="Extracted general information from file"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error processing file: {str(e)}")
-            return FileProcessingResult(
-                extracted_devices={},
-                extracted_information="",
-                processing_summary=f"Error processing file: {str(e)}"
+            # Extract file processing results
+            file_extractions = []
+            for file_result in ai_response.get("file_extractions", []):
+                file_extractions.append(FileProcessingResult(
+                    extracted_devices=file_result.get("extracted_devices", {}),
+                    extracted_information=file_result.get("extracted_information", ""),
+                    processing_summary=file_result.get("processing_summary", "Processed file successfully")
+                ))
+            
+            # Calculate progress for requirements gathering
+            progress = None
+            if request.current_stage == Stage.GATHERING_REQUIREMENTS:
+                progress = self._calculate_requirements_progress(updated_context)
+            
+            return ContextUpdateResponse(
+                updated_context=updated_context,
+                chat_message=ai_response.get("chat_message", ""),
+                gathering_requirements_progress=progress,
+                current_stage=request.current_stage,
+                is_mcq=ai_response.get("is_mcq", False),
+                is_multiselect=ai_response.get("is_multiselect", False),
+                mcq_question=ai_response.get("mcq_question"),
+                mcq_options=ai_response.get("mcq_options", []),
+                generated_code=ai_response.get("generated_code"),
+                file_extractions=file_extractions
+            )
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse comprehensive AI response: {e}")
+            logger.error(f"Raw response (first 1000 chars): {response[:1000]}")
+            # Fallback response
+            return ContextUpdateResponse(
+                updated_context=request.current_context,
+                chat_message="I encountered an error processing your request. Please try again.",
+                gathering_requirements_progress=0.0 if request.current_stage == Stage.GATHERING_REQUIREMENTS else None,
+                current_stage=request.current_stage,
+                is_mcq=False,
+                is_multiselect=False,
+                mcq_question=None,
+                mcq_options=[],
+                file_extractions=[]
             )
     
     def _integrate_file_extraction(
@@ -187,207 +221,6 @@ class ContextProcessingService:
             device_constants=updated_devices,
             information=updated_info
         )
-    
-    async def _update_context_with_user_input(
-        self,
-        context: ProjectContext,
-        message: Optional[str],
-        mcq_responses: List[str]
-    ) -> ProjectContext:
-        """
-        Update context with user message and MCQ responses using AI.
-        
-        Args:
-            context: Current project context
-            message: User message
-            mcq_responses: Selected MCQ options
-            
-        Returns:
-            Updated context with user input integrated
-        """
-        if not message and not mcq_responses:
-            return context
-        
-        # Build prompt to update context
-        update_prompt = self._build_context_update_prompt(context, message, mcq_responses)
-        
-        from app.schemas.openai import ChatRequest
-        request = ChatRequest(
-            user_prompt="",  # Will be overridden by messages
-            model="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=1024
-        )
-        response, usage = await self.openai_service.chat_completion(
-            request,
-            messages=[{"role": "user", "content": update_prompt}]
-        )
-        
-        try:
-            updated_data = json.loads(response)
-            return ProjectContext(
-                device_constants=updated_data.get("device_constants", context.device_constants),
-                information=updated_data.get("information", context.information)
-            )
-        except json.JSONDecodeError:
-            logger.warning("AI didn't return valid JSON for context update, keeping original context")
-            return context
-    
-    async def _handle_requirements_gathering(
-        self,
-        context: ProjectContext,
-        request: ContextUpdateRequest
-    ) -> ContextUpdateResponse:
-        """
-        Handle requirements gathering stage with progress calculation and MCQ generation.
-        
-        Args:
-            context: Updated project context
-            request: Original request for stage context
-            
-        Returns:
-            Response with progress, MCQ, or transition suggestion
-        """
-        # Calculate progress based on context completeness
-        progress = self._calculate_requirements_progress(context)
-        
-        # Generate next question or MCQ
-        question_prompt = self._build_requirements_question_prompt(context, progress)
-        
-        from app.schemas.openai import ChatRequest
-        request = ChatRequest(
-            user_prompt="",  # Will be overridden by messages
-            model="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=512
-        )
-        response, usage = await self.openai_service.chat_completion(
-            request,
-            messages=[{"role": "user", "content": question_prompt}]
-        )
-        
-        # Parse AI response for MCQ or regular question
-        try:
-            ai_response = json.loads(response)
-            return ContextUpdateResponse(
-                updated_context=context,
-                chat_message=ai_response.get("message", response),
-                gathering_requirements_progress=progress,
-                current_stage=Stage.GATHERING_REQUIREMENTS,
-                is_mcq=ai_response.get("is_mcq", False),
-                is_multiselect=ai_response.get("is_multiselect", False),
-                mcq_question=ai_response.get("mcq_question"),
-                mcq_options=ai_response.get("mcq_options", [])
-            )
-        except json.JSONDecodeError:
-            # Fallback to regular message
-            return ContextUpdateResponse(
-                updated_context=context,
-                chat_message=response,
-                gathering_requirements_progress=progress,
-                current_stage=Stage.GATHERING_REQUIREMENTS,
-                is_mcq=False,
-                is_multiselect=False,
-                mcq_question=None,
-                mcq_options=[]
-            )
-    
-    async def _handle_code_generation(
-        self,
-        context: ProjectContext,
-        current_stage: Stage
-    ) -> ContextUpdateResponse:
-        """
-        Handle code generation stage - generate Structured Text.
-        
-        Args:
-            context: Project context with requirements
-            current_stage: Current stage (should be CODE_GENERATION)
-            
-        Returns:
-            Response with generated Structured Text code
-        """
-        # Generate Structured Text based on context
-        code_prompt = self._build_code_generation_prompt(context)
-        
-        from app.schemas.openai import ChatRequest
-        chat_request = ChatRequest(
-            user_prompt="",  # Will be overridden by messages
-            model="gpt-4o",  # Use more powerful model for code generation
-            temperature=0.3,
-            max_completion_tokens=2048
-        )
-        response, usage = await self.openai_service.chat_completion(
-            chat_request,
-            messages=[{"role": "user", "content": code_prompt}]
-        )
-        
-        return ContextUpdateResponse(
-            updated_context=context,
-            chat_message="I've generated the Structured Text code based on your requirements. You can now review and refine it.",
-            gathering_requirements_progress=None,
-            current_stage=current_stage,  # Keep current stage instead of auto-transitioning
-            is_mcq=False,
-            is_multiselect=False,
-            mcq_question=None,
-            mcq_options=[],
-            generated_code=response
-        )
-    
-    async def _handle_refinement_testing(
-        self,
-        context: ProjectContext,
-        request: ContextUpdateRequest
-    ) -> ContextUpdateResponse:
-        """
-        Handle refinement and testing stage.
-        
-        Args:
-            context: Project context
-            request: Original request
-            
-        Returns:
-            Response for refinement interactions
-        """
-        # Generate refinement response based on user input
-        refinement_prompt = self._build_refinement_prompt(context, request.message)
-        
-        from app.schemas.openai import ChatRequest
-        request_obj = ChatRequest(
-            user_prompt="",  # Will be overridden by messages
-            model="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=512
-        )
-        response, usage = await self.openai_service.chat_completion(
-            request_obj,
-            messages=[{"role": "user", "content": refinement_prompt}]
-        )
-        
-        # Check if response should be MCQ
-        try:
-            ai_response = json.loads(response)
-            return ContextUpdateResponse(
-                updated_context=context,
-                chat_message=ai_response.get("message", response),
-                gathering_requirements_progress=None,
-                current_stage=Stage.REFINEMENT_TESTING,
-                is_mcq=ai_response.get("is_mcq", False),
-                is_multiselect=ai_response.get("is_multiselect", False),
-                mcq_question=ai_response.get("mcq_question"),
-                mcq_options=ai_response.get("mcq_options", [])
-            )
-        except json.JSONDecodeError:
-            return ContextUpdateResponse(
-                updated_context=context,
-                chat_message=response,
-                gathering_requirements_progress=None,
-                current_stage=Stage.REFINEMENT_TESTING,
-                is_mcq=False,
-                is_multiselect=False,
-                mcq_question=None,
-                mcq_options=[]
-            )
     
     def _calculate_requirements_progress(self, context: ProjectContext) -> float:
         """
@@ -502,6 +335,147 @@ class ContextProcessingService:
                 items.append((new_key, v))
         return dict(items)
     
+    def _build_comprehensive_prompt(
+        self,
+        context: ProjectContext,
+        stage: Stage,
+        user_message: Optional[str],
+        mcq_responses: List[str],
+        extracted_file_texts: List[str]
+    ) -> str:
+        """Build comprehensive prompt that handles everything in one LLM call."""
+        
+        # Calculate current progress for requirements gathering
+        progress = self._calculate_requirements_progress(context) if stage == Stage.GATHERING_REQUIREMENTS else 0.0
+        
+        # File content section (comes at the end)
+        file_content_section = ""
+        if extracted_file_texts:
+            # Truncate file content but not too aggressively (8000 chars to preserve important info)
+            combined_file_text = "\n\n--- FILE SEPARATOR ---\n\n".join(extracted_file_texts)
+            max_file_content = 8000
+            if len(combined_file_text) > max_file_content:
+                combined_file_text = combined_file_text[:max_file_content] + "...[truncated]"
+            
+            file_content_section = f"""
+
+=== SUPPLEMENTARY FILE DATA ===
+NOTE: The user's message and MCQ responses above are MORE IMPORTANT than file content.
+Use file content as additional context only.
+
+Uploaded file content:
+{combined_file_text}
+"""
+
+        # Stage-specific instructions
+        stage_instructions = ""
+        expected_response_fields = ""
+        
+        if stage == Stage.GATHERING_REQUIREMENTS:
+            stage_instructions = f"""
+STAGE: Requirements Gathering (Progress: {progress:.1%})
+
+Your primary task is to ask the next focused question to gather PLC programming requirements.
+Reference the user's input when appropriate to provide contextual follow-up questions.
+
+PRIORITIES (ask about missing items first):
+1. Safety requirements (emergency stops, protection)
+2. I/O specifications (inputs, outputs, sensors, actuators)  
+3. Control sequence basics
+4. PLC platform/hardware
+5. Communication requirements
+
+Use MCQ for standardized choices (safety features, voltage levels, protocols, etc.).
+"""
+            expected_response_fields = """
+    "chat_message": "Your question or response",
+    "is_mcq": false,
+    "mcq_question": null,
+    "mcq_options": [],
+    "is_multiselect": false,
+    "generated_code": null,"""
+            
+        elif stage == Stage.CODE_GENERATION:
+            stage_instructions = """
+STAGE: Code Generation
+
+Generate complete, production-ready Structured Text (ST) code including:
+- Variable declarations (inputs, outputs, internal variables)
+- Function blocks and programs
+- Main control logic with safety interlocks
+- Error handling and clear comments
+
+Structure: TYPE declarations → PROGRAM → VAR sections → Main logic → Safety/error handling
+
+CRITICAL: The Structured Text code must be properly escaped as a JSON string value.
+"""
+            expected_response_fields = """
+    "chat_message": "I've generated the Structured Text code based on your requirements. You can now review and refine it.",
+    "is_mcq": false,
+    "mcq_question": null,
+    "mcq_options": [],
+    "is_multiselect": false,
+    "generated_code": "PROGRAM Main\\nVAR\\n  // Variable declarations\\nEND_VAR\\n\\n// Main logic\\n\\nEND_PROGRAM","""
+            
+        elif stage == Stage.REFINEMENT_TESTING:
+            stage_instructions = """
+STAGE: Refinement and Testing
+
+Provide helpful responses for code refinement. You can:
+- Suggest improvements
+- Ask clarifying questions (use MCQ for standard choices)
+- Provide technical guidance
+- Help with testing scenarios
+"""
+            expected_response_fields = """
+    "chat_message": "Your response",
+    "is_mcq": false,
+    "mcq_question": null,
+    "mcq_options": [],
+    "is_multiselect": false,
+    "generated_code": null,"""
+
+        return f"""=== PRIMARY CONTEXT (MOST IMPORTANT) ===
+
+Current Project Context:
+Device Constants: {json.dumps(context.device_constants, indent=2)}
+Information: {context.information}
+
+USER INPUT (CRITICAL - MUST BE REFERENCED):
+Message: {user_message or "None"}
+MCQ Responses: {mcq_responses or "None"}
+
+{stage_instructions}
+
+TASK: Process the user input, update the context, extract any file data, and provide appropriate response.
+
+Return a JSON object with this EXACT structure:
+{{
+    "updated_context": {{
+        "device_constants": {{
+            // Updated device specifications - integrate file extractions and user input
+        }},
+        "information": "Updated markdown summary - integrate user input and file data concisely"
+    }},
+    {expected_response_fields}
+    "file_extractions": [
+        {{
+            "extracted_devices": {{
+                // Device specs extracted from files
+            }},
+            "extracted_information": "Brief PLC-relevant summary from files",
+            "processing_summary": "One sentence about what was extracted"
+        }}
+    ]
+}}
+
+CRITICAL RULES:
+- User message and MCQ responses are PRIMARY - reference them directly in your response
+- Only extract PLC-relevant information from files (devices, I/O, safety, control logic)
+- Be extremely concise in updated context
+- If no files uploaded, return empty file_extractions array
+- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options{file_content_section}"""
+    
     def _build_file_extraction_prompt(self, file_content: str) -> str:
         """Build prompt for extracting PLC-relevant data from files."""
         # Truncate content to avoid token limits
@@ -545,132 +519,4 @@ Ignore:
 - Installation procedures
 - Non-technical content
 - Marketing information
-"""
-    
-    def _build_context_update_prompt(
-        self, 
-        context: ProjectContext, 
-        message: Optional[str], 
-        mcq_responses: List[str]
-    ) -> str:
-        """Build prompt for updating context with user input."""
-        return f"""
-Update the project context based on user input. Be extremely concise and only include essential PLC-relevant information.
-
-Current context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Information: {context.information}
-
-User input:
-Message: {message or "None"}
-MCQ Responses: {mcq_responses or "None"}
-
-Return updated context in this exact JSON format:
-{{
-    "device_constants": {{
-        // Updated nested JSON with device specs - keep concise
-    }},
-    "information": "Updated markdown summary - be very brief, only essential info"
-}}
-
-CRITICAL RULES:
-- Only keep information directly relevant to PLC code generation
-- Be extremely concise in information field
-- Avoid redundancy and unnecessary details
-- Focus on technical specifications and requirements
-"""
-    
-    def _build_requirements_question_prompt(self, context: ProjectContext, progress: float) -> str:
-        """Build prompt for generating next requirements question."""
-        return f"""
-You are a PLC programming expert gathering requirements. Current progress: {progress:.1%}
-
-Current context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Information: {context.information}
-
-Based on the context, generate the next focused question to gather essential PLC programming requirements.
-
-Return JSON in this exact format:
-{{
-    "message": "Your question or response",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false
-}}
-
-OR for multiple choice questions:
-{{
-    "message": "Brief intro if needed",
-    "is_mcq": true, 
-    "mcq_question": "Clear, specific question",
-    "mcq_options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-    "is_multiselect": false
-}}
-
-PRIORITIES (ask about missing items first):
-1. Safety requirements (emergency stops, protection)
-2. I/O specifications (inputs, outputs, sensors, actuators)
-3. Control sequence basics
-4. PLC platform/hardware
-5. Communication requirements
-
-Ask ONE focused question. Use MCQ for standardized choices (safety features, voltage levels, protocols, etc.).
-"""
-    
-    def _build_code_generation_prompt(self, context: ProjectContext) -> str:
-        """Build prompt for generating Structured Text code."""
-        return f"""
-Generate complete Structured Text (ST) code for this PLC automation project.
-
-Project Context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Requirements: {context.information}
-
-Generate production-ready Structured Text including:
-- Variable declarations (inputs, outputs, internal variables)
-- Function blocks and programs
-- Main control logic
-- Safety interlocks
-- Error handling
-- Clear comments
-
-Structure the code with:
-1. TYPE declarations (if needed)
-2. PROGRAM declaration
-3. VAR sections (inputs, outputs, internal)
-4. Main control logic
-5. Safety and error handling
-
-Make the code complete, compilable, and well-documented.
-"""
-    
-    def _build_refinement_prompt(self, context: ProjectContext, user_message: Optional[str]) -> str:
-        """Build prompt for refinement stage responses."""
-        return f"""
-You are in the refinement/testing stage helping improve PLC code and requirements.
-
-Current context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Information: {context.information}
-
-User message: {user_message or "No specific message"}
-
-Provide helpful response for code refinement. You can:
-- Suggest improvements
-- Ask clarifying questions (use MCQ for standard choices)
-- Provide technical guidance
-- Help with testing scenarios
-
-Return JSON format:
-{{
-    "message": "Your response",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false
-}}
-
-Keep responses focused and actionable.
 """

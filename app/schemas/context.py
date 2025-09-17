@@ -7,6 +7,7 @@ This module defines the data structures for the context-based approach where:
 3. Single endpoint for all user interactions with files, MCQs, and stage management
 """
 
+from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -28,6 +29,21 @@ class ProjectContext(BaseModel):
     information: str = Field(
         default="",
         description="Markdown-formatted summary of project requirements, decisions, and notes"
+    )
+
+
+class FileProcessingResult(BaseModel):
+    """Result of processing an uploaded file."""
+    extracted_devices: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Device specifications extracted from file"
+    )
+    extracted_information: str = Field(
+        default="",
+        description="Relevant project information extracted from file"
+    )
+    processing_summary: str = Field(
+        description="Brief summary of what was extracted from the file"
     )
 
 
@@ -85,20 +101,9 @@ class ContextUpdateResponse(BaseModel):
         None,
         description="Generated Structured Text code (only when current_stage=code_generation)"
     )
-
-
-class FileProcessingResult(BaseModel):
-    """Result of processing an uploaded file."""
-    extracted_devices: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Device specifications extracted from file"
-    )
-    extracted_information: str = Field(
-        default="",
-        description="Relevant project information extracted from file"
-    )
-    processing_summary: str = Field(
-        description="Brief summary of what was extracted from the file"
+    file_extractions: List[FileProcessingResult] = Field(
+        default_factory=list,
+        description="List of file extraction results (one per uploaded file)"
     )
 
 
