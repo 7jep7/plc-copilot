@@ -311,14 +311,14 @@ class ContextProcessingService:
         code_prompt = self._build_code_generation_prompt(context)
         
         from app.schemas.openai import ChatRequest
-        request = ChatRequest(
+        chat_request = ChatRequest(
             user_prompt="",  # Will be overridden by messages
             model="gpt-4o",  # Use more powerful model for code generation
             temperature=0.3,
-            max_tokens=2048
+            max_completion_tokens=2048
         )
         response, usage = await self.openai_service.chat_completion(
-            request,
+            chat_request,
             messages=[{"role": "user", "content": code_prompt}]
         )
         
@@ -326,7 +326,7 @@ class ContextProcessingService:
             updated_context=context,
             chat_message="I've generated the Structured Text code based on your requirements. You can now review and refine it.",
             gathering_requirements_progress=None,
-            current_stage=Stage.REFINEMENT_TESTING,  # Auto-transition to refinement
+            current_stage=current_stage,  # Keep current stage instead of auto-transitioning
             is_mcq=False,
             is_multiselect=False,
             mcq_question=None,

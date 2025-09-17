@@ -69,7 +69,7 @@ async def update_context(
             context = ProjectContext(**context_data)
         except (json.JSONDecodeError, ValueError) as e:
             raise HTTPException(
-                status_code=400,
+                status_code=422,
                 detail=f"Invalid current_context JSON: {str(e)}"
             )
         
@@ -81,7 +81,7 @@ async def update_context(
                     raise ValueError("mcq_responses must be a list")
             except (json.JSONDecodeError, ValueError) as e:
                 raise HTTPException(
-                    status_code=400,
+                    status_code=422,
                     detail=f"Invalid mcq_responses JSON: {str(e)}"
                 )
         
