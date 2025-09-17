@@ -24,6 +24,7 @@ The new architecture processes PDF documents (datasheets, manuals, specification
 **Parameters**:
 - `message`: string (optional) - User message about the files
 - `files`: File[] (optional) - PDF files to process
+- `previous_copilot_message`: string (optional) - Previous AI response for conversation continuity
 - `current_context`: JSON string (required) - Current project context
 - `current_stage`: string (required) - Current workflow stage
 - `mcq_responses`: JSON array (optional) - MCQ responses if applicable
@@ -33,6 +34,9 @@ The new architecture processes PDF documents (datasheets, manuals, specification
 const formData = new FormData();
 formData.append('message', 'Please analyze this motor datasheet');
 formData.append('files', motorDatasheetFile);
+if (lastCopilotMessage) {
+  formData.append('previous_copilot_message', lastCopilotMessage);
+}
 formData.append('current_context', JSON.stringify({
   device_constants: {},
   information: ""

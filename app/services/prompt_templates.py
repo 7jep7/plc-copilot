@@ -18,7 +18,8 @@ class PromptTemplates:
         context: ProjectContext,
         stage: Stage,
         user_message: Optional[str],
-        mcq_responses: List[str]
+        mcq_responses: List[str],
+        previous_copilot_message: Optional[str] = None
     ) -> str:
         """
         Template A: Optimized for user messages without files.
@@ -45,8 +46,8 @@ class PromptTemplates:
         
         # Add conversation context for better response interpretation
         conversation_context = ""
-        if context.information and "previous question:" in context.information.lower():
-            conversation_context = "\nCONVERSATION CONTEXT: The current context contains previous interaction history which should inform your response."
+        if previous_copilot_message:
+            conversation_context = f"\nCONVERSATION CONTEXT: Previous copilot message was: {previous_copilot_message}"
         
         # Build special handling section (only if context is empty)
         special_handling_section = ""
@@ -65,7 +66,6 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
             "- Be GENEROUS with information storage using intelligent markdown section structure",
             "- Information should NOT duplicate device constants (those go in device_constants section)",
             "- Reference their input directly and maintain conversation continuity",
-            "- Store conversation history using 'Previous Question:' format for context",
             "- Use your expertise to determine next priority topic or completion readiness",
             "- For devices: specify origin as \"user message\" since no files are involved",
             "- Be conversational and responsive to their specific automation needs",
@@ -110,7 +110,8 @@ CRITICAL RULES:
         stage: Stage,
         user_message: Optional[str],
         mcq_responses: List[str],
-        extracted_file_texts: List[str]
+        extracted_file_texts: List[str],
+        previous_copilot_message: Optional[str] = None
     ) -> str:
         """
         Template B: Optimized for user messages with files.
@@ -156,8 +157,8 @@ Uploaded file content:
         
         # Add conversation context for better response interpretation
         conversation_context = ""
-        if context.information and "previous question:" in context.information.lower():
-            conversation_context = "\nCONVERSATION CONTEXT: The current context contains previous interaction history which should inform your response."
+        if previous_copilot_message:
+            conversation_context = f"\nCONVERSATION CONTEXT: Previous copilot message was: {previous_copilot_message}"
         
         # Build special handling section (only if context is empty)
         special_handling_section = ""
@@ -175,7 +176,6 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
             "- Be GENEROUS with information storage using intelligent markdown section structure",
             "- Information should NOT duplicate device constants (those go in device_constants section)",
             f"- User message{' and MCQ responses' if mcq_responses else ''} are PRIMARY - reference them directly",
-            "- Store conversation history using 'Previous Question:' format for context",
             "- Use your expertise to determine next priority topic or completion readiness",
             "- Extract only PLC-relevant information from files (devices, I/O, safety, control logic)",
             "- Set origin=\"user message\" for user devices, origin=\"file\" for file-extracted devices",

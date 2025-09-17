@@ -347,6 +347,7 @@ class TestContextAPIIntegration:
             result = await update_context(
                 message="Test message",
                 mcq_responses=None,
+                previous_copilot_message=None,
                 current_context='{"device_constants": {}, "information": ""}',
                 current_stage=Stage.GATHERING_REQUIREMENTS,
                 files=[]

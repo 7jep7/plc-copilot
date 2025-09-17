@@ -76,6 +76,10 @@ class ContextUpdateRequest(BaseModel):
         default_factory=list,
         description="Selected MCQ options if responding to multiple choice question"
     )
+    previous_copilot_message: Optional[str] = Field(
+        None,
+        description="Previous message from the copilot for conversation continuity"
+    )
     current_context: ProjectContext = Field(
         default_factory=ProjectContext,
         description="Current project context state"

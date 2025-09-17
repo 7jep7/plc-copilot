@@ -15,13 +15,17 @@ const updateContext = async (
   files?: File[],
   context: ProjectContext,
   stage: string,
-  mcqResponses?: string[]
+  mcqResponses?: string[],
+  previousCopilotMessage?: string
 ) => {
   const formData = new FormData();
   
   if (message) formData.append('message', message);
   if (mcqResponses?.length) {
     formData.append('mcq_responses', JSON.stringify(mcqResponses));
+  }
+  if (previousCopilotMessage) {
+    formData.append('previous_copilot_message', previousCopilotMessage);
   }
   files?.forEach(file => formData.append('files', file));
   formData.append('current_context', JSON.stringify(context));
@@ -73,6 +77,7 @@ interface ContextUpdateResponse {
 // 1. Start with empty context
 let context = { device_constants: {}, information: "" };
 let stage = "gathering_requirements";
+let lastCopilotMessage = null;
 
 // 2. User uploads motor datasheet
 const response1 = await updateContext(
@@ -84,27 +89,32 @@ const response1 = await updateContext(
 
 // 3. Context now has motor specs, AI asks MCQ
 context = response1.updated_context;
+lastCopilotMessage = response1.chat_message; // Store for continuity
 if (response1.is_mcq) {
   // Show MCQ to user
 }
 
-// 4. User answers MCQ
+// 4. User answers MCQ with conversation context
 const response2 = await updateContext(
   null, // No message, just MCQ response
   null, 
   context, 
   stage,
-  ["Option A"] // MCQ responses
+  ["Option A"], // MCQ responses
+  lastCopilotMessage // Previous AI message for context
 );
 
 // 5. Continue until ready for code generation
+lastCopilotMessage = response2.chat_message;
 if (response2.progress >= 0.8) {
   stage = "code_generation";
   const codeResponse = await updateContext(
     "Generate the PLC code",
     null,
     context,
-    stage
+    stage,
+    null,
+    lastCopilotMessage
   );
   // codeResponse.generated_code contains the ST code
 }

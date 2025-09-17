@@ -34,6 +34,7 @@ async def update_context(
     # JSON fields
     message: Optional[str] = Form(None),
     mcq_responses: Optional[str] = Form(None),  # JSON string of list
+    previous_copilot_message: Optional[str] = Form(None),
     current_context: str = Form(...),  # JSON string of ProjectContext
     current_stage: Stage = Form(Stage.GATHERING_REQUIREMENTS),
     # File uploads
@@ -51,6 +52,7 @@ async def update_context(
     Args:
         message: User message or response
         mcq_responses: JSON string of selected MCQ options
+        previous_copilot_message: Previous message from copilot for conversation continuity
         current_context: JSON string of current ProjectContext
         current_stage: Current workflow stage
         files: List of uploaded files to process
@@ -89,6 +91,7 @@ async def update_context(
         request = ContextUpdateRequest(
             message=message,
             mcq_responses=mcq_list,
+            previous_copilot_message=previous_copilot_message,
             current_context=context,
             current_stage=current_stage
         )

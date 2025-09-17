@@ -135,7 +135,8 @@ class ContextProcessingService:
                 stage=request.current_stage,
                 user_message=request.message,
                 mcq_responses=request.mcq_responses,
-                extracted_file_texts=extracted_file_texts
+                extracted_file_texts=extracted_file_texts,
+                previous_copilot_message=request.previous_copilot_message
             )
         else:
             # Template A: For messages without files
@@ -143,7 +144,8 @@ class ContextProcessingService:
                 context=request.current_context,
                 stage=request.current_stage,
                 user_message=request.message,
-                mcq_responses=request.mcq_responses
+                mcq_responses=request.mcq_responses,
+                previous_copilot_message=request.previous_copilot_message
             )
         
         # Single LLM call with higher token limit for comprehensive response
