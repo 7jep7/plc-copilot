@@ -32,35 +32,65 @@
 
 Create the copilot for Programmable Logic Controllers. Automate automating. Program, test, maintain, and redeploy robots and any PLC-powered assembly line and industrial process with complete transparency and user control.
 
+## 🚀 What's New - Major Architecture Improvements
+
+### **🎯 Context-Centric Refactor (Latest)**
+- **Single Endpoint**: All interactions through `POST /api/v1/context/update`
+- **Single LLM Call**: Eliminated multi-step latency - one comprehensive AI interaction per request
+- **Conversation Continuity**: `previous_copilot_message` field enables natural conversation flow
+- **Robust Error Handling**: JSON parsing retry with corrective prompts when LLM responses fail
+
+### **🧠 Advanced Prompt Engineering**
+- **Dual Template System**: Template A (user-only) vs Template B (file analysis) optimization
+- **Conditional Logic**: MCQ/off-topic handling only mentioned when relevant (token optimization)
+- **LLM-Driven Analysis**: AI determines topic coverage, progress, and next actions autonomously
+- **Domain Expertise**: Industrial automation-specific prompt engineering
+
+### **⚡ Performance & Reliability**
+- **Immediate File Processing**: PDFs analyzed and integrated in single API call
+- **Device Origin Tracking**: Track whether devices come from user input or file analysis
+- **Async/Sync Compatibility**: Flexible deployment with comprehensive test coverage
+- **Rate Limit Intelligence**: Automatic OpenAI model fallback (gpt-4o-mini → gpt-3.5-turbo → gpt-4o)
+
 ## Features
 
-### Core Architecture ✅
-1. **🎯 Context-Centric Design**: All AI knowledge stored in transparent, editable context objects
-2. **📄 Immediate File Processing**: Upload PDFs and instantly extract PLC-relevant specifications  
-3. **🤖 AI-Powered Code Generation**: Convert natural language and context into production-ready Structured Text
-4. **📊 Smart Progress Tracking**: AI calculates requirements completion automatically
-5. **❓ Intelligent MCQ System**: Structured questions for standardized inputs and faster data gathering
+### 🏗️ **Robust Backend Architecture** 
+1. **🎯 Context-Centric Design**: Single source of truth with transparent, editable project context
+2. **⚡ Single LLM Call Per Interaction**: Eliminates latency from multiple API calls  
+3. **🧠 Intelligent Prompt Engineering**: Dual template system (Template A/B) optimized for different scenarios
+4. **🔄 Robust Error Handling**: JSON parsing retry logic with corrective prompts
+5. **📄 Immediate File Processing**: Upload PDFs and instantly extract PLC-relevant specifications  
 
-### Architecture Benefits ⭐
+### 🤖 **AI-Powered Intelligence**
+6. **🎯 LLM-Driven Requirements Analysis**: AI determines topic coverage and progress automatically
+7. **📊 Smart Progress Tracking**: Automatic requirements completion estimation (0.0-1.0)
+8. **❓ Conditional MCQ System**: AI generates questions only when needed, not prompted unnecessarily
+9. **🔍 Context-Aware Responses**: Previous conversation context for natural flow
+10. **🏭 Industrial Domain Expertise**: Specialized for PLC/automation engineering
+
+### 🛠️ **Production-Ready Features**
 - **Single Integration Point**: All interactions through `POST /api/v1/context/update`
 - **Stateless Operation**: No hidden conversation state to debug
-- **Transparent Context**: Users can see and edit exactly what the AI knows
-- **File Processing**: Documents processed immediately, not stored
-- **Type Safety**: Strong interfaces for reliable integration
+- **Type Safety**: Strong Pydantic schemas for reliable integration  
+- **Async/Sync Compatibility**: Flexible for different deployment scenarios
+- **Comprehensive Testing**: Full test suite with integration and unit tests
+- **Device Origin Tracking**: Track whether devices come from user input or file analysis
 
-### Additional Features 🔧
-6. **Digital Twin Testing**: Simple simulation functionality for code validation
-7. **Code Library & Knowledge Base**: Industrial-grade ST code samples with search capabilities
-8. **Direct AI Chat**: Stateless chat endpoint for quick questions
+### 🔧 **Additional Capabilities**
+11. **Code Generation**: Convert natural language and context into production-ready Structured Text
+12. **Digital Twin Testing**: Simple simulation functionality for code validation
+13. **Code Library & Knowledge Base**: Industrial-grade ST code samples with intelligent search
+14. **Direct AI Chat**: Stateless chat endpoint for quick questions
+15. **File Extraction Results**: LLM-processed file content included in API responses
 
-### Technical Features
+### 🏢 **Enterprise-Ready Architecture**
 - **RESTful API**: Context-centric architecture with stateless endpoints
-- **Intelligent Context Management**: AI-driven context updates with user override capability
-- **Production-ready deployment** on Render.com
-- **Structured logging** and health monitoring
-- **Database migrations** with Alembic
-- **Background task processing** with Celery
-- **Comprehensive error handling** and validation
+- **Production Deployment**: Ready for Render.com with comprehensive monitoring
+- **Structured Logging**: Detailed logging for debugging and monitoring
+- **Database Integration**: PostgreSQL with Alembic migrations
+- **Background Processing**: Celery support for long-running tasks
+- **Comprehensive Validation**: Request/response validation with clear error messages
+- **Rate Limiting**: Intelligent OpenAI model fallback and cost management
 
 ### Rate Limiting & Cost Management 💡
 
@@ -159,78 +189,93 @@ celery -A app.worker worker --loglevel=info
 
 ## API Reference
 
-### 🎯 **NEW: Context-Centric API** ⭐
-**Single endpoint for all interactions - Recommended for all new integrations**
+### 🎯 **Context-Centric Architecture** ⭐
 
-#### Main Context Endpoint
-- `POST /api/v1/context/update` - **Unified endpoint for all user interactions**
-  - Handle user messages, MCQ responses, and file uploads in one request
-  - AI-driven progress calculation and stage management
-  - Immediate file processing with selective PLC-relevant extraction
-### Main Context API
-- `POST /api/v1/context/update` - **Primary endpoint** for all user interactions
-  - Accepts messages, MCQ responses, file uploads, and context updates
-  - Returns updated context, chat responses, MCQs, and generated code
-  - Supports multipart/form-data for file uploads
+#### **Main Context API - Single Endpoint for Everything**
+**`POST /api/v1/context/update`** - **Primary endpoint** for all user interactions
+- **Unified Processing**: Messages, MCQ responses, file uploads, and context updates in one call
+- **Single LLM Interaction**: Eliminates latency from multiple API calls per interaction
+- **Intelligent Prompt Selection**: 
+  - **Template A**: Optimized for user-only interactions (no files)
+  - **Template B**: Optimized for file analysis with user context prioritization
+- **Conversation Continuity**: Supports `previous_copilot_message` field for natural flow
+- **Robust Error Handling**: JSON parsing retry with corrective prompts
+- **File Processing**: Immediate PDF analysis with selective PLC-relevant extraction
+- **Content-Type**: `multipart/form-data` for file uploads
 
-### AI Chat API
-- `POST /api/v1/ai/chat` - Stateless chat interaction with AI
-  - Direct questions without context persistence
-  - Useful for quick help and explanations
+#### **Key API Capabilities**
+- **Context Management**: Transparent, editable project context with device origin tracking
+- **Progress Estimation**: AI-driven requirements completion analysis (0.0-1.0)
+- **MCQ Generation**: Conditional multiple-choice questions when needed
+- **Stage Management**: Three-stage workflow (requirements → code → refinement)
+- **File Integration**: Immediate processing with LLM-analyzed results in response
 
-### PLC Code Management
-- `GET /api/v1/plc/codes` - List all generated PLC codes
-- `POST /api/v1/plc/codes` - Create new PLC code entry
-- `GET /api/v1/plc/codes/{id}` - Get specific PLC code
-- `PUT /api/v1/plc/codes/{id}` - Update existing PLC code
-- `DELETE /api/v1/plc/codes/{id}` - Delete PLC code
-- `POST /api/v1/plc/generate` - Generate PLC code from context
+### 🧠 **Advanced Prompt Engineering**
 
-### Digital Twin Management
-- `GET /api/v1/digital-twin/configs` - List twin configurations
-- `POST /api/v1/digital-twin/configs` - Create twin configuration
-- `POST /api/v1/digital-twin/simulate` - Run simulation
+#### **Dual Template System**
+- **Template A**: Optimized for direct user interactions (text/MCQ only)
+  - Streamlined prompts for faster processing
+  - Focused on conversation flow and requirements gathering
+  - Conditional logic - only mentions MCQ/off-topic handling when relevant
+  
+- **Template B**: Optimized for file analysis scenarios  
+  - User input prioritized, files provide supplementary context
+  - Intelligent file content integration
+  - Selective PLC-relevant information extraction
 
-### Code Library
-- `GET /api/v1/library/examples` - Browse code examples
-- `POST /api/v1/library/search` - Search code library
+#### **Intelligent Prompt Optimization**
+- **Token Efficiency**: Conditional prompt sections reduce unnecessary token usage
+- **Context-Aware**: Previous conversation context for natural flow
+- **LLM-Driven Analysis**: AI determines topic coverage, progress, and next actions
+- **Error Recovery**: Corrective prompts when JSON parsing fails
+- **Domain Expertise**: Industrial automation-specific prompt engineering
 
-### System Endpoints
-- `GET /health` - Health check
-- `GET /` - API information
-- `POST /api/v1/plc-code/generate` - Generate PLC code from user prompt
-- `GET /api/v1/plc-code/` - List generated PLC codes
-- `GET /api/v1/plc-code/{id}` - Get specific PLC code
-- `POST /api/v1/plc-code/{id}/validate` - Validate PLC code syntax
-- `POST /api/v1/plc-code/{id}/compile` - Compile PLC code
+#### **Legacy API Endpoints** (Available but not recommended for new projects)
+*Use the Context API above for new integrations*
 
-### Digital Twin Testing
-- `POST /api/v1/digital-twin/` - Create digital twin simulation
-- `GET /api/v1/digital-twin/` - List digital twins
-- `POST /api/v1/digital-twin/{id}/test` - Test PLC code in simulation
-- `GET /api/v1/digital-twin/{id}/runs` - Get simulation test results
+- **AI Chat**: `POST /api/v1/ai/chat` - Stateless chat interactions
+- **PLC Code Management**: CRUD operations for generated code
+- **Digital Twin**: Simulation configuration and testing  
+- **Code Library**: Industrial ST code samples and search
+- **System**: Health checks and API information
 
-### Code Library (WIP) 🔧
-*Work in Progress - Advanced ST code management and semantic search*
+*Full endpoint documentation available at `/docs` when running locally*
 
-- `GET /api/v1/library/` - Library summary and statistics
-- `GET /api/v1/library/structure` - Complete directory structure
-- `POST /api/v1/library/search` - Search files by query and domain
-- `GET /api/v1/library/browse/{domain}` - Browse files by domain
-- `GET /api/v1/library/file/{domain}/{filename}` - Get file content
-- `POST /api/v1/library/upload` - Upload ST files via JSON
-- `POST /api/v1/library/upload-file` - Upload ST files via multipart
-- `POST /api/v1/library/similar` - Find similar files
-- `GET /api/v1/library/user-uploads` - List user contributions
-- `DELETE /api/v1/library/user-uploads/{domain}/{filename}` - Delete files
+## 🏗️ Backend Architecture
 
-### System
-- `GET /health` - Health check endpoint
-- `GET /` - API information
+### **Service Layer Architecture**
+```
+📁 app/
+├── 🎯 api/v1/endpoints/          # FastAPI route handlers
+│   ├── context.py               # Main context-centric endpoint
+│   ├── ai.py                    # Direct AI chat
+│   ├── plc_code.py              # PLC code management
+│   └── digital_twin.py          # Simulation endpoints
+├── 🧠 services/                 # Business logic layer
+│   ├── context_service.py       # Core context processing (NEW)
+│   ├── prompt_templates.py      # Dual template system (NEW)
+│   ├── openai_service.py        # LLM integration with fallback
+│   └── document_service.py      # File processing utilities
+├── 📊 schemas/                  # Pydantic data models
+│   ├── context.py               # Context & workflow schemas (UPDATED)
+│   ├── openai.py                # LLM request/response models
+│   └── plc_code.py              # Code generation schemas
+└── 🏭 models/                   # SQLAlchemy database models
+    ├── conversation.py          # Chat history storage
+    ├── plc_code.py              # Generated code storage
+    └── document.py              # File metadata storage
+```
+
+### **Key Architecture Improvements**
+- **🎯 Single Source of Truth**: `ContextService` orchestrates all interactions
+- **⚡ Performance**: Single LLM call eliminates multi-step latency
+- **🛡️ Robust Error Handling**: JSON parsing retry with corrective prompts
+- **🧩 Modular Design**: Clean separation between API, services, and data layers
+- **📈 Scalable**: Async/await patterns for high-concurrency deployment
 
 ## User Workflow
 
-The PLC Copilot now features a **unified context-centric approach** that simplifies frontend integration while providing powerful AI-driven automation project development.
+The PLC Copilot features a **unified context-centric approach** that simplifies frontend integration while providing powerful AI-driven automation project development.
 
 ## 🎯 New Context-Centric Workflow
 
@@ -262,21 +307,30 @@ The system maintains a unified context with two main components:
 }
 ```
 
-### Three-Stage Workflow
-1. **Gathering Requirements** - AI asks focused questions and processes uploaded files
-2. **Code Generation** - Generates complete Structured Text based on gathered context
-3. **Refinement & Testing** - Iterative improvement through conversation and manual editing
+### **Advanced Workflow Management**
 
-### Stage Management
-- **AI-Inferred Progress**: System calculates completion automatically (0.0-1.0 in requirements gathering)
-- **User-Controlled Transitions**: Frontend can force stage transitions anytime
-- **No Backward Navigation**: Cannot return to requirements gathering (forward-only workflow)
+#### **Three-Stage Process**
+1. **📋 Gathering Requirements** - AI-driven requirements analysis with intelligent questioning
+2. **⚙️ Code Generation** - Complete Structured Text generation from comprehensive context  
+3. **🔧 Refinement & Testing** - Iterative improvement and validation
 
-### File Processing
-- **Immediate Processing**: Files processed instantly, no storage required
-- **Selective Extraction**: AI extracts only PLC-relevant specifications
-- **Context Integration**: Device specs and information automatically merged
-- **Lean Approach**: Focuses on essential data to avoid context bloat
+#### **Intelligent Stage Management**
+- **🤖 AI-Driven Progress**: Automatic completion estimation (0.0-1.0 scale)
+- **🎯 Context-Aware Transitions**: AI determines readiness for next stage
+- **🚀 User Override**: Frontend can force stage transitions when needed
+- **➡️ Forward-Only Flow**: Prevents confusion from backward navigation
+
+#### **Smart File Processing**
+- **⚡ Immediate Analysis**: Files processed and integrated in single API call
+- **🎯 Selective Extraction**: AI identifies and extracts only PLC-relevant data
+- **🏷️ Origin Tracking**: Device constants tagged as "user message" or "file" origin
+- **💾 No Storage Required**: Documents processed and discarded (privacy-focused)
+
+#### **Enhanced Context Management**
+- **📊 Structured Data**: Device constants stored as structured objects with metadata
+- **📝 Information Layer**: Markdown-formatted project requirements and decisions
+- **🔄 Conversation Continuity**: Previous AI messages inform natural response flow
+- **✏️ User Editable**: Complete transparency - users can view/edit all AI knowledge
 
 ## Context API Usage
 
@@ -287,6 +341,7 @@ Content-Type: multipart/form-data
 
 message: "I need optical sensors for detection"
 mcq_responses: ["Emergency stop buttons only", "Light curtains"]  // JSON array
+previous_copilot_message: "What safety measures does your system need?"  // Optional
 current_context: {
   "device_constants": {...},
   "information": "project requirements..."
@@ -337,6 +392,7 @@ interface ContextResponse {
 async function updateContext(
   message?: string,
   mcqResponses?: string[],
+  previousCopilotMessage?: string,
   context: ProjectContext,
   stage: string,
   files?: File[]
@@ -345,6 +401,7 @@ async function updateContext(
   
   if (message) formData.append('message', message);
   if (mcqResponses?.length) formData.append('mcq_responses', JSON.stringify(mcqResponses));
+  if (previousCopilotMessage) formData.append('previous_copilot_message', previousCopilotMessage);
   formData.append('current_context', JSON.stringify(context));
   formData.append('current_stage', stage);
   
@@ -364,22 +421,25 @@ async function updateContext(
 const result = await updateContext(
   "I need to automate a conveyor belt system",
   undefined,
+  undefined,  // No previous message for first interaction
   { device_constants: {}, information: "" },
   "gathering_requirements"
 );
 
-// Handle MCQ response
+// Handle MCQ response with conversation continuity
 const mcqResult = await updateContext(
   undefined,
   ["Emergency stop buttons only", "Light curtains"],
+  result.chat_message,  // Pass previous AI response for context
   currentContext,
   "gathering_requirements"
 );
 
-// File upload with message
+// File upload with message and conversation context
 const fileResult = await updateContext(
   "Here's the motor datasheet",
   undefined,
+  lastCopilotMessage,  // Maintain conversation flow
   currentContext,
   "gathering_requirements",
   [motorDatasheet.pdf]
@@ -389,6 +449,7 @@ const fileResult = await updateContext(
 const codeResult = await updateContext(
   undefined,
   undefined,
+  lastCopilotMessage,
   currentContext,
   "code_generation"  // AI will generate Structured Text
 );
@@ -402,6 +463,7 @@ export default {
       context: { device_constants: {}, information: "" },
       currentStage: "gathering_requirements",
       chatMessage: "",
+      lastCopilotMessage: null,  // Track for conversation continuity
       isMcq: false,
       mcqOptions: [],
       progress: 0
@@ -412,6 +474,9 @@ export default {
       try {
         const formData = new FormData();
         formData.append('message', message);
+        if (this.lastCopilotMessage) {
+          formData.append('previous_copilot_message', this.lastCopilotMessage);
+        }
         formData.append('current_context', JSON.stringify(this.context));
         formData.append('current_stage', this.currentStage);
         
@@ -430,6 +495,7 @@ export default {
         this.context = result.updated_context;
         this.currentStage = result.current_stage;
         this.chatMessage = result.chat_message;
+        this.lastCopilotMessage = result.chat_message;  // Store for next interaction
         this.isMcq = result.is_mcq;
         this.mcqOptions = result.mcq_options || [];
         this.progress = result.gathering_requirements_progress || 0;
@@ -577,12 +643,6 @@ The new Context API provides all the functionality of the legacy system with sig
 2. **Manual editing**: Direct code modifications with real-time validation
 3. **Testing feedback**: Run simulations and iterate based on results
 
-**Testing Features**:
-- Digital twin simulation with visual feedback
-- Automated robustness testing
-- Edge case scenario validation
-- Performance optimization suggestions
-
 ### Conversation Management
 
 PLC Copilot provides two API approaches for different use cases:
@@ -661,6 +721,51 @@ const response = await fetch('/api/v1/ai/chat', {
 - Full message history and stage context preserved
 - Requirements, generated code, and refinements tracked
 - Export and version control throughout the workflow
+
+## 🧪 Testing & Reliability
+
+### **Comprehensive Test Suite**
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Context API tests (core functionality)
+python -m pytest tests/test_context_api.py -v
+
+# Integration tests (full workflow)
+python -m pytest tests/integration/ -v
+```
+
+### **Test Coverage**
+- **✅ Context API**: Full workflow testing with mocked LLM responses
+- **✅ File Processing**: PDF extraction and integration testing 
+- **✅ Error Handling**: JSON parsing failures and retry logic
+- **✅ Stage Transitions**: Requirements → Code → Refinement workflows
+- **✅ MCQ System**: Question generation and response handling
+- **✅ Async/Sync Compatibility**: Support for different deployment scenarios
+
+### **Robust Error Handling**
+- **🔄 JSON Parse Retry**: Automatic corrective prompts when LLM response fails to parse
+- **🎯 Rate Limit Management**: Intelligent model fallback (gpt-4o-mini → gpt-3.5-turbo → gpt-4o)
+- **📊 Structured Validation**: Pydantic schemas ensure type safety throughout
+- **🛡️ Graceful Degradation**: Fallback responses when AI services are unavailable
+- **📝 Comprehensive Logging**: Detailed error tracking for debugging
+
+### **Interactive CLI Demo**
+```bash
+# Test the full workflow interactively
+python scripts/cli_flow_demo.py --live
+
+# Dry run (no API calls)
+python scripts/cli_flow_demo.py
+```
+
+### **Production Readiness**
+- **⚡ Performance**: Single LLM call per interaction (reduced latency)
+- **🔄 Async Processing**: FastAPI async/await for high concurrency
+- **📊 Monitoring**: Health checks and structured logging
+- **🏭 Scalability**: Stateless design enables horizontal scaling
+- **🛡️ Security**: Input validation and sanitization throughout
 
 ## Deployment
 
@@ -775,7 +880,7 @@ plc-copilot/
 - **Validation**: Pydantic for request/response validation
 - **Logging**: Structured logging with structlog
 - **Monitoring**: Sentry for error tracking (optional)
-- **Deployment**: Render.com with Gunicorn + Uvicorn workers
+- **Deployment**: Render.com with Docker containerization
 
 ## Document Processing Pipeline
 
@@ -809,7 +914,7 @@ for page_num in range(doc.page_count):
 
 **Single-pass processing** using **GPT-4o**:
 - **Temperature 0.3** for consistent technical analysis
-- **8KB content limit** per document for cost efficiency
+- Documents are truncated to **8000 characters** (≈8 KB) per document before being included in prompts to control token usage. This is characters, not tokens. 8000 characters roughly corresponds to **4–8 pages** of typical datasheet or marketing PDF content (page count depends on layout, tables and figures — estimate ~1000–2000 characters of readable text per page). If you need the entire document analysed, provide a short human-prepared summary or split the PDF into smaller parts; for more accurate token budgeting consider switching to a token-based truncation (e.g., via tiktoken).
 - **Structured extraction** of PLC-relevant specifications
 
 **Extracted Information:**
@@ -950,21 +1055,37 @@ python tests/integration/test_code_library_api.py
 
 ## Development
 
-### Code Quality
+## Development
+
+### **Development Workflow**
+```bash
+# Start development environment
+conda activate plc-copilot  # or your preferred venv
+python scripts/dev_server.py
+
+# Run with auto-reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### **Code Quality & Standards**
 ```bash
 # Format code
 black app/
 isort app/
 
-# Lint
-flake8 app/
+# Type checking
 mypy app/
 
-# Test
-pytest
+# Lint
+flake8 app/
+
+# Test suite
+pytest tests/ -v
+pytest tests/test_context_api.py -v  # Core functionality
+pytest tests/integration/ -v        # Full workflows
 ```
 
-### Database Management
+### **Database Management**
 ```bash
 # Create new migration
 alembic revision --autogenerate -m "Description"
@@ -976,11 +1097,25 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
-### Monitoring
-- Health endpoint: `/health`
-- Logs: Structured JSON logs to stdout
-- Metrics: Ready for Prometheus integration
-- Errors: Sentry integration (configure `SENTRY_DSN`)
+### **Interactive Development**
+```bash
+# Test context API interactively
+python scripts/cli_flow_demo.py --live
+
+# Test prompt templates
+python -c "
+from app.services.prompt_templates import PromptTemplates
+from app.schemas.context import ProjectContext, Stage
+# Test template generation...
+"
+```
+
+### **Performance & Monitoring**
+- **Health Endpoint**: `/health` - System status and dependencies
+- **Structured Logging**: JSON logs with request correlation IDs
+- **Metrics Ready**: Prometheus integration points available
+- **Error Tracking**: Sentry integration (configure `SENTRY_DSN`)
+- **Request Validation**: Comprehensive Pydantic schemas throughout
 
 ## Contributing
 
@@ -1028,7 +1163,7 @@ Using Swagger: visit `http://localhost:8000/docs`, open `POST /api/v1/ai/chat`, 
 
 ```json
 {
-  "user_prompt": "Explain emergency stop logic for a conveyor",
+  "user_prompt": "Explain PLC ladder logic basics",
   "model": "gpt-4o-mini",
   "temperature": 1.0,
   "max_tokens": 128
@@ -1293,12 +1428,6 @@ Content-Type: application/json
 }
 ```
 
-**Critical Frontend MCQ Handling:**
-- When `is_mcq` is true, display ONLY `mcq_question` and `mcq_options` to user
-- Avoid displaying full `response` text alongside MCQ to prevent cognitive overload
-- Provide clean, focused interface for user selection
-```
-
 #### Get Conversation State
 ```http
 GET /api/v1/conversations/{conversation_id}
@@ -1499,112 +1628,3 @@ async function apiCall(url: string, options: RequestInit) {
   }
 }
 ```
-```
-    ```json
-    {
-      "model": "gpt-4o-mini",
-      "content": "string",
-      "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
-    }
-    ```
-
-### Document Management
-- POST /api/v1/documents/upload
-  - Upload a PDF file (multipart/form-data) with key `file`. Returns created `Document` metadata.
-- GET /api/v1/documents/
-  - List documents. Query params: `skip`, `limit`.
-- POST /api/v1/documents/{id}/process
-  - Process the uploaded document to extract PLC-relevant context.
-
-### PLC Code Generation
-- POST /api/v1/plc/generate
-  - Request JSON (PLCGenerationRequest): includes `user_prompt`, `language` (e.g., `structured_text`), `max_tokens`, `temperature`, and flags like `include_io_definitions`.
-  - Response JSON: `PLCCodeResponse` — contains `source_code`, `id`, `language`, `generated_at`, and metadata.
-
-### Digital Twin
-- POST /api/v1/digital-twin/
-  - Create a digital twin simulation record; accept PLC code id and parameters.
-- POST /api/v1/digital-twin/{id}/test
-  - Run a simulation test. Returns run results and logs.
-
-### System
-- GET /health — useful for readiness/liveness checks by load balancers.
-
-Notes on authentication and security:
-- The backend currently expects trusted clients or deployment-level protection. Add an API authentication layer (JWT or API keys) for production.
-- Do not store secrets in client-side code or public repositories. Use `.env` or platform secrets (Render, Docker secrets, etc.).
-
-## SDK Generation
-
-FastAPI automatically generates an OpenAPI JSON at `/openapi.json`. Use it to generate client SDKs for any language:
-
-**Python Client:**
-```bash
-pip install openapi-python-client
-openapi-python-client generate --url http://localhost:8000/openapi.json
-```
-
-**TypeScript Client:**
-```bash
-openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o ./frontend-client
-```
-
-## Next Steps
-
-This backend provides a complete foundation for PLC automation workflows:
-
-- ✅ **Multi-stage conversation system** for guided PLC development
-- ✅ **Stage-aware AI prompts** for technical accuracy
-- ✅ **Flexible API design** supporting both workflows and ad-hoc queries
-- ✅ **Production-ready deployment** with comprehensive error handling
-- ✅ **Frontend integration examples** with TypeScript patterns
-
-**For Production:**
-1. **Deploy to Render.com** using included `render.yaml` configuration
-2. **Add Supabase persistence** for conversation state (beyond MVP)
-3. **Implement authentication** (JWT/API keys) for security
-4. **Scale workers** based on usage patterns
-
-**For Development:**
-1. **Follow frontend integration guide** in the API documentation section
-2. **Use conversation endpoints** for full workflow features
-3. **Test with provided examples** and Swagger UI at `/docs`
-4. **Extend prompt templates** for domain-specific requirements
-
-## Future Optimizations
-
-### 💰 OpenAI API Cost Reduction
-
-The current implementation sends full conversation context with every API call, which provides excellent context awareness but can be expensive at scale. Future optimizations include:
-
-**📉 Token Usage Reduction:**
-- **Truncate History**: Send only recent or relevant messages to reduce token usage
-- **Summarize Context**: Use API to summarize past conversation, replacing long history with a concise summary
-- **Use System Messages**: Define chatbot role in system message to avoid repeating in every request
-- **Monitor Tokens**: Track usage with tools like `tiktoken` and optimize input to stay cost-efficient
-
-**🎯 Smart Context Management:**
-- **Stage-Specific Context**: Only send relevant context for current conversation stage
-- **Document Context Caching**: Cache processed document summaries to avoid reprocessing
-- **Incremental Updates**: Track context changes and send only deltas when possible
-- **Context Compression**: Compress older conversation turns into concise summaries
-
-**💡 Implementation Priority:**
-1. **Message Window Reduction** (easy win: 60-80% token reduction)
-2. **Stage-Specific Context Filtering** (medium complexity, high impact)
-3. **OpenAI Assistants API Integration** (complex but enables persistent conversation threads)
-
-Current cost: ~1,000-6,000 tokens per interaction. Target: ~300-1,500 tokens per interaction.
-
-## Dependencies
-
-### Technology Stack
-
-**Core Framework**: FastAPI with Uvicorn/Gunicorn deployment  
-**Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations  
-**AI Integration**: OpenAI GPT models for conversation and code generation  
-**Document Processing**: pdfplumber, PyMuPDF, PyPDF2 for PDF parsing  
-**Background Tasks**: Celery with Redis for async processing  
-**Deployment**: Render.com with Docker containerization  
-
-**LangChain**: Currently included in dependencies for future RAG (Retrieval-Augmented Generation) integration with the Code Library feature. Not actively used in MVP but retained for planned semantic search and intelligent code retrieval capabilities.
