@@ -228,6 +228,56 @@ class DocumentService:
         
         return "\n\n".join(text_content)
     
+    def extract_text_from_bytes(self, file_data: bytes) -> str:
+        """
+        Extract text from PDF file bytes for immediate processing.
+        
+        Args:
+            file_data: PDF file content as bytes
+            
+        Returns:
+            Extracted text content
+        """
+        from io import BytesIO
+        
+        text_content = []
+        
+        try:
+            # Method 1: pdfplumber
+            with pdfplumber.open(BytesIO(file_data)) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        text_content.append(text)
+        except Exception as e:
+            logger.warning("pdfplumber extraction from bytes failed", error=str(e))
+        
+        if not text_content:
+            try:
+                # Method 2: PyMuPDF
+                doc = fitz.open(stream=file_data, filetype="pdf")
+                for page_num in range(doc.page_count):
+                    page = doc[page_num]
+                    text = page.get_text()
+                    if text:
+                        text_content.append(text)
+                doc.close()
+            except Exception as e:
+                logger.warning("PyMuPDF extraction from bytes failed", error=str(e))
+        
+        if not text_content:
+            try:
+                # Method 3: PyPDF2
+                pdf_reader = PyPDF2.PdfReader(BytesIO(file_data))
+                for page in pdf_reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        text_content.append(text)
+            except Exception as e:
+                logger.warning("PyPDF2 extraction from bytes failed", error=str(e))
+        
+        return "\n\n".join(text_content)
+    
     def _classify_document_type(self, text: str) -> DocumentType:
         """Classify document type based on content."""
         text_lower = text.lower()
