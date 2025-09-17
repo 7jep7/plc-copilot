@@ -95,7 +95,7 @@ class TestContextProcessingService:
 
         assert isinstance(response, ContextUpdateResponse)
         assert response.current_stage == Stage.GATHERING_REQUIREMENTS
-        assert response.gathering_requirements_progress is not None
+        assert response.gathering_requirements_estimated_progress is not None
         assert response.chat_message == "What type of sensors will detect items on the conveyor?"
         assert not response.is_mcq
 
@@ -213,7 +213,7 @@ END_PROGRAM
         assert response.generated_code is not None
         assert "PROGRAM ConveyorControl" in response.generated_code
         assert "MotorRun" in response.generated_code
-        assert response.gathering_requirements_progress is None  # Not in requirements stage
+        assert response.gathering_requirements_estimated_progress is None  # Not in requirements stage
 
     @pytest.mark.asyncio
     async def test_refinement_testing_stage(self, context_service, sample_context):
@@ -246,44 +246,6 @@ END_PROGRAM
         assert response.is_mcq
         assert response.is_multiselect
         assert "safety improvements" in response.mcq_question.lower()
-
-    def test_progress_calculation_empty_context(self, context_service):
-        """Test progress calculation with minimal context."""
-        empty_context = ProjectContext()
-        progress = context_service._calculate_requirements_progress(empty_context)
-        assert progress == 0.0
-
-    def test_progress_calculation_full_context(self, context_service, sample_context):
-        """Test progress calculation with comprehensive context."""
-        # Add more detailed context
-        full_context = ProjectContext(
-            device_constants={
-                "ConveyorMotor": {"Type": "AC Servo", "Power": "2.5kW"},
-                "Sensors": {"PhotoEye": {"Type": "Optical", "Range": "2m"}},
-                "Safety": {"EStop": {"Count": 2}, "LightCurtain": {"Height": "1800mm"}},
-                "PLC": {"Model": "Siemens S7-1200", "IO": {"DI": 16, "DO": 16}}
-            },
-            information="""
-            ## Safety Requirements
-            - Emergency stop functionality required
-            - Light curtains for operator protection
-            
-            ## I/O Specifications  
-            - 8 digital inputs for sensors
-            - 6 digital outputs for actuators
-            
-            ## Control Sequence
-            - Start/stop control with safety interlocks
-            - Variable speed control for conveyor
-            
-            ## Control Logic
-            - PLC-based control system
-            - HMI interface for operator
-            """
-        )
-        
-        progress = context_service._calculate_requirements_progress(full_context)
-        assert progress > 0.8  # Should be high progress
 
     def test_file_extraction_error_handling(self, context_service):
         """Test error handling in file processing."""

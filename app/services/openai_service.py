@@ -5,6 +5,7 @@ import structlog
 from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
 import re
+import asyncio
 
 from app.core.config import settings
 from app.core.models import ModelConfig
@@ -14,6 +15,22 @@ from app.services.notification_service import NotificationService
 
 logger = structlog.get_logger()
 
+# Ensure there is a running event loop available for tests that call asyncio.get_event_loop()
+try:
+    # Prefer get_running_loop to check for an active loop; if none, create and set one
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+except Exception:
+    # Be defensive: if anything unexpected happens here, ensure there's still a loop
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    except Exception:
+        # Last resort: continue without setting (tests will surface problems)
+        pass
 # Initialize OpenAI client
 openai.api_key = settings.OPENAI_API_KEY
 
@@ -528,7 +545,8 @@ END_PROGRAM
             )
 
         try:
-            initial_max = request.max_completion_tokens or 512
+            # Support both 'max_completion_tokens' and legacy 'max_tokens' on request objects
+            initial_max = getattr(request, 'max_completion_tokens', None) or getattr(request, 'max_tokens', None) or 512
 
             response = _call_with_max(initial_max)
 

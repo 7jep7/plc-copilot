@@ -89,7 +89,7 @@ def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
     simulated = {
         "updated_context": request.current_context.model_dump(),
         "chat_message": "(dry-run) This is a simulated AI response. To get real responses, run with --live.",
-        "gathering_requirements_progress": 0.1 if request.current_stage == Stage.GATHERING_REQUIREMENTS else None,
+        "gathering_requirements_estimated_progress": 0.1 if request.current_stage == Stage.GATHERING_REQUIREMENTS else None,
         "current_stage": request.current_stage.value,
         "is_mcq": False,
         "is_multiselect": False,

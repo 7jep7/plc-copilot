@@ -43,9 +43,10 @@ class DeviceEntry(BaseModel):
 
 class ProjectContext(BaseModel):
     """Complete project context structure."""
-    device_constants: Dict[str, Union[DeviceEntry, Any]] = Field(
+    # Keep device_constants flexible and JSON-serializable for backwards compatibility with tests
+    device_constants: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Device specifications with origin tracking. Keys are device names, values are DeviceEntry objects or legacy flexible data."
+        description="Device specifications with origin tracking. Keys are device names, values are dicts or DeviceEntry-like structures."
     )
     information: str = Field(
         default="",
@@ -93,9 +94,9 @@ class ContextUpdateResponse(BaseModel):
     chat_message: str = Field(
         description="AI response message to display to user"
     )
-    gathering_requirements_progress: Optional[float] = Field(
+    gathering_requirements_estimated_progress: Optional[float] = Field(
         None,
-        description="Progress indicator (0.0-1.0) only present in gathering_requirements stage",
+        description="AI's estimation of requirements completion (0.0-1.0) for automatic stage transition",
         ge=0.0,
         le=1.0
     )

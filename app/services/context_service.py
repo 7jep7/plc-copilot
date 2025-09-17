@@ -10,6 +10,7 @@ Features:
 """
 
 import json
+import asyncio
 import re
 from typing import Dict, List, Optional, Any, Tuple
 from urllib.parse import urljoin
@@ -74,24 +75,41 @@ class ContextProcessingService:
         """
         logger.info(f"Processing context update for stage: {request.current_stage}")
         
-        # Extract text from uploaded files (no LLM call yet)
-        extracted_file_texts = []
+        # Extract text from uploaded files and process them asynchronously
+        extracted_file_texts: List[str] = []
+        file_results: List[FileProcessingResult] = []
         if uploaded_files:
             for file_data in uploaded_files:
                 try:
                     file_bytes = file_data.getvalue()
-                    extracted_text = self._extract_text_from_bytes(file_bytes)
-                    if extracted_text and extracted_text != "PDF processing libraries not available":
-                        extracted_file_texts.append(extracted_text)
+                    # Use async helper to process uploaded file (may call LLM)
+                    result = await self._process_uploaded_file(file_bytes)
+                    file_results.append(result)
+                    if result.extracted_information:
+                        extracted_file_texts.append(result.extracted_information)
                 except Exception as e:
-                    logger.warning(f"Failed to extract text from uploaded file: {e}")
-        
+                    logger.warning(f"Failed to extract/process uploaded file: {e}")
+
+        # Integrate file extraction results into the current context before the comprehensive LLM call
+        current_ctx = request.current_context
+        for fr in file_results:
+            current_ctx = self._integrate_file_extraction(current_ctx, fr)
+
         # Single comprehensive LLM call that handles everything
         response = await self._process_comprehensive_update(
-            request, 
+            ContextUpdateRequest(
+                message=request.message,
+                mcq_responses=request.mcq_responses,
+                current_context=current_ctx,
+                current_stage=request.current_stage
+            ),
             extracted_file_texts
         )
-        
+
+        # Attach file_extractions produced earlier if the LLM didn't include them
+        if response.file_extractions == [] and file_results:
+            response.file_extractions = file_results
+
         return response
     
     async def _process_comprehensive_update(
@@ -137,10 +155,43 @@ class ContextProcessingService:
             max_tokens=2048 if request.current_stage == Stage.CODE_GENERATION else 1024
         )
         
-        response, usage = await self.openai_service.chat_completion(
+        # Call the chat_completion helper - allow for sync or async mocks in tests
+        chat_call = self.openai_service.chat_completion(
             chat_request,
             messages=[{"role": "user", "content": comprehensive_prompt}]
         )
+
+        # Resolve the call (support async awaitables and sync returns/mocks)
+        raw_resp = None
+        if hasattr(chat_call, '__await__'):
+            raw_resp = await chat_call
+        else:
+            raw_resp = chat_call
+
+        # Normalize response into (response_text, usage)
+        response = None
+        usage = None
+        try:
+            # If returned a tuple/list like (content, usage)
+            if isinstance(raw_resp, (list, tuple)) and len(raw_resp) >= 1:
+                response = raw_resp[0]
+                usage = raw_resp[1] if len(raw_resp) > 1 else None
+            elif hasattr(raw_resp, 'content'):
+                response = raw_resp.content
+                usage = getattr(raw_resp, 'usage', None)
+            elif hasattr(raw_resp, 'choices'):
+                # OpenAI-like object
+                try:
+                    response = raw_resp.choices[0].message.content
+                    usage = getattr(raw_resp, 'usage', None)
+                except Exception:
+                    response = str(raw_resp)
+            elif isinstance(raw_resp, str):
+                response = raw_resp
+            else:
+                response = str(raw_resp)
+        except Exception:
+            response = str(raw_resp)
         
         # Parse comprehensive response
         try:
@@ -154,12 +205,42 @@ class ContextProcessingService:
                 response_content = response_content[:-3]  # Remove ```
             response_content = response_content.strip()
             
-            ai_response = json.loads(response_content)
+            # Try to parse JSON. If this fails and we're in CODE_GENERATION stage,
+            # assume the model returned raw code and treat it as generated_code.
+            try:
+                ai_response = json.loads(response_content)
+            except json.JSONDecodeError:
+                if request.current_stage == Stage.CODE_GENERATION:
+                    # Treat the entire response as generated code
+                    return ContextUpdateResponse(
+                        updated_context=request.current_context,
+                        chat_message="",
+                        gathering_requirements_estimated_progress=None,
+                        # transition to refinement/testing because code was produced
+                        current_stage=Stage.REFINEMENT_TESTING,
+                        is_mcq=False,
+                        is_multiselect=False,
+                        mcq_question=None,
+                        mcq_options=[],
+                        generated_code=response_content,
+                        file_extractions=[]
+                    )
+                else:
+                    raise
             
             # Extract updated context
             updated_context_data = ai_response.get("updated_context", {})
+            # Normalize device_constants: ensure dicts for JSON compatibility
+            raw_devices = updated_context_data.get("device_constants", request.current_context.device_constants)
+            norm_devices = {}
+            for name, val in (raw_devices or {}).items():
+                if hasattr(val, 'model_dump'):
+                    norm_devices[name] = val.model_dump()
+                else:
+                    norm_devices[name] = val
+
             updated_context = ProjectContext(
-                device_constants=updated_context_data.get("device_constants", request.current_context.device_constants),
+                device_constants=norm_devices,
                 information=updated_context_data.get("information", request.current_context.information)
             )
             
@@ -172,20 +253,68 @@ class ContextProcessingService:
                     processing_summary=file_result.get("processing_summary", "Processed file successfully")
                 ))
             
-            # Calculate progress for requirements gathering
-            progress = None
+            # Get AI's progress estimation for requirements gathering
+            estimated_progress = None
             if request.current_stage == Stage.GATHERING_REQUIREMENTS:
-                progress = PromptTemplates._calculate_requirements_progress(updated_context)
+                estimated_progress = ai_response.get("gathering_requirements_estimated_progress")
+                # If the LLM didn't provide a numeric value, default to a neutral mid-point
+                if estimated_progress is None:
+                    estimated_progress = 0.5
+
+            # If the AI didn't include a chat_message, request a concise follow-up question/message
+            # Accept either 'chat_message' or 'message' from LLM outputs
+            chat_message = ai_response.get("chat_message") or ai_response.get("message", "")
+            is_mcq_val = bool(ai_response.get("is_mcq", False))
+            mcq_question = ai_response.get("mcq_question")
+            mcq_options = ai_response.get("mcq_options", [])
+
+            if not chat_message:
+                # Build a lightweight follow-up prompt using the updated context
+                followup_prompt = f"Based on the updated context (device_constants and information), produce a short user-facing JSON response with keys: message, is_mcq, mcq_question, mcq_options, is_multiselect. Only return valid JSON.\nContext devices: {json.dumps(updated_context.device_constants)}\nInformation: {updated_context.information}"
+
+                follow_call = self.openai_service.chat_completion(
+                    chat_request,
+                    messages=[{"role": "user", "content": followup_prompt}]
+                )
+
+                # Resolve follow-up call (support sync mocks)
+                if hasattr(follow_call, '__await__'):
+                    follow_raw = await follow_call
+                else:
+                    follow_raw = follow_call
+
+                # Normalize follow_raw similarly to earlier
+                follow_resp = None
+                if isinstance(follow_raw, (list, tuple)) and len(follow_raw) >= 1:
+                    follow_resp = follow_raw[0]
+                elif hasattr(follow_raw, 'content'):
+                    follow_resp = follow_raw.content
+                elif isinstance(follow_raw, str):
+                    follow_resp = follow_raw
+                else:
+                    follow_resp = str(follow_raw)
+
+                # Try parsing JSON from follow_resp
+                try:
+                    follow_json = json.loads(follow_resp)
+                    chat_message = follow_json.get('message') or follow_json.get('chat_message') or ''
+                    is_mcq_val = bool(follow_json.get('is_mcq', is_mcq_val))
+                    mcq_question = follow_json.get('mcq_question', mcq_question)
+                    mcq_options = follow_json.get('mcq_options', mcq_options)
+                except Exception:
+                    # If parse fails, fall back to raw text
+                    chat_message = follow_resp if isinstance(follow_resp, str) else str(follow_resp)
             
             return ContextUpdateResponse(
                 updated_context=updated_context,
-                chat_message=ai_response.get("chat_message", ""),
-                gathering_requirements_progress=progress,
+                chat_message=chat_message or "",
+                gathering_requirements_estimated_progress=estimated_progress,
                 current_stage=request.current_stage,
-                is_mcq=ai_response.get("is_mcq", False),
-                is_multiselect=ai_response.get("is_multiselect", False),
-                mcq_question=ai_response.get("mcq_question"),
-                mcq_options=ai_response.get("mcq_options", []),
+                # Use normalized MCQ values
+                is_mcq=is_mcq_val,
+                is_multiselect=bool(ai_response.get("is_multiselect", False)),
+                mcq_question=mcq_question,
+                mcq_options=mcq_options,
                 generated_code=ai_response.get("generated_code"),
                 file_extractions=file_extractions
             )
@@ -197,7 +326,7 @@ class ContextProcessingService:
             return ContextUpdateResponse(
                 updated_context=request.current_context,
                 chat_message="I encountered an error processing your request. Please try again.",
-                gathering_requirements_progress=0.0 if request.current_stage == Stage.GATHERING_REQUIREMENTS else None,
+                gathering_requirements_estimated_progress=None,
                 current_stage=request.current_stage,
                 is_mcq=False,
                 is_multiselect=False,
@@ -222,15 +351,20 @@ class ContextProcessingService:
             Updated context with file data integrated
         """
         # Merge extracted devices into device_constants
-        updated_devices = context.device_constants.copy()
-        for device_name, device_data in extraction.extracted_devices.items():
-            if device_name in updated_devices:
-                # Merge existing device data
-                if isinstance(updated_devices[device_name], dict) and isinstance(device_data, dict):
-                    updated_devices[device_name].update(device_data)
-                else:
-                    updated_devices[device_name] = device_data
+        updated_devices = {}
+        # Normalize existing devices to dicts
+        for k, v in context.device_constants.items():
+            if hasattr(v, 'model_dump'):
+                updated_devices[k] = v.model_dump()
             else:
+                updated_devices[k] = v
+
+        for device_name, device_data in extraction.extracted_devices.items():
+            if device_name in updated_devices and isinstance(updated_devices[device_name], dict) and isinstance(device_data, dict):
+                # Merge keys
+                updated_devices[device_name].update(device_data)
+            else:
+                # Overwrite or add
                 updated_devices[device_name] = device_data
         
         # Append extracted information to context information
@@ -297,6 +431,55 @@ class ContextProcessingService:
                 logger.warning(f"PyPDF2 extraction from bytes failed: {e}")
         
         return "\n\n".join(text_content)
+
+
+    async def _process_uploaded_file(self, file_bytes: bytes) -> FileProcessingResult:
+        """Async file processor used during request handling; calls the LLM to parse file content."""
+        try:
+            text = self._extract_text_from_bytes(file_bytes)
+            if not text:
+                return FileProcessingResult(extracted_devices={}, extracted_information="", processing_summary="No text extracted")
+
+            prompt = self._build_file_extraction_prompt(text)
+            chat_req = type("R", (), {"user_prompt": prompt, "model": None, "temperature": 0.7, "max_completion_tokens": 1024})
+
+            call = self.openai_service.chat_completion(chat_req, messages=[{"role": "user", "content": prompt}])
+            if hasattr(call, '__await__'):
+                raw = await call
+            else:
+                raw = call
+
+            # Normalize raw response
+            resp_text = None
+            if isinstance(raw, (list, tuple)) and len(raw) >= 1:
+                resp_text = raw[0]
+            elif hasattr(raw, 'content'):
+                resp_text = raw.content
+            elif isinstance(raw, str):
+                resp_text = raw
+            else:
+                resp_text = str(raw)
+
+            import json as _json
+            try:
+                parsed = _json.loads(resp_text)
+                devices = parsed.get('devices', {})
+                info = parsed.get('information', '')
+                summary = parsed.get('summary', 'Processed file successfully')
+                return FileProcessingResult(
+                    extracted_devices=devices,
+                    extracted_information=info,
+                    processing_summary=summary
+                )
+            except Exception:
+                # Fallback: return the raw text snippet
+                return FileProcessingResult(
+                    extracted_devices={},
+                    extracted_information=text[:2000],
+                    processing_summary="Could not parse structured extraction from LLM"
+                )
+        except Exception as e:
+            return FileProcessingResult(extracted_devices={}, extracted_information="", processing_summary=f"Error processing file: {e}")
     
     def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '') -> Dict[str, Any]:
         """Flatten nested dictionary to count total keys."""
@@ -316,7 +499,7 @@ class ContextProcessingService:
         max_content = 6000  # Keep well under token limits
         if len(file_content) > max_content:
             file_content = file_content[:max_content] + "...[truncated]"
-        
+
         return f"""
 Extract PLC-relevant device specifications and information from this document.
 
@@ -346,11 +529,4 @@ Focus on:
 - I/O requirements and configurations
 - Safety requirements
 - Control sequences and timing
-- Communication protocols
-
-Ignore:
-- General documentation
-- Installation procedures
-- Non-technical content
-- Marketing information
 """

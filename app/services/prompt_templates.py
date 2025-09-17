@@ -24,11 +24,8 @@ class PromptTemplates:
         Template A: Optimized for user messages without files.
         Focuses on direct user interaction, MCQ responses, and current context.
         """
-        # Calculate current progress for requirements gathering
-        progress = PromptTemplates._calculate_requirements_progress(context) if stage == Stage.GATHERING_REQUIREMENTS else 0.0
-        
         # Stage-specific instructions
-        stage_instructions, expected_response_fields = PromptTemplates._get_stage_instructions(stage, progress)
+        stage_instructions, expected_response_fields = PromptTemplates._get_stage_instructions(stage, context)
         
         # Prepare device constants for JSON serialization (handle DeviceEntry objects)
         device_constants_dict = {}
@@ -46,6 +43,11 @@ class PromptTemplates:
         if mcq_responses:
             user_input_section += f"\nMCQ Responses: {mcq_responses}"
         
+        # Add conversation context for better response interpretation
+        conversation_context = ""
+        if context.information and "previous question:" in context.information.lower():
+            conversation_context = "\nCONVERSATION CONTEXT: The current context contains previous interaction history which should inform your response."
+        
         # Build special handling section (only if context is empty)
         special_handling_section = ""
         if context_is_empty:
@@ -58,11 +60,15 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         if context_is_empty:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
         critical_rules.extend([
-            "- Be GENEROUS with information storage - capture all potentially useful details from user input",
+            "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
+            "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
+            "- Be GENEROUS with information storage using intelligent markdown section structure",
             "- Information should NOT duplicate device constants (those go in device_constants section)",
-            "- Reference their input directly in your response",
-            "- For each device in device_constants, specify origin as \"user message\" since no files are involved",
-            "- Be conversational and responsive to their specific needs",
+            "- Reference their input directly and maintain conversation continuity",
+            "- Store conversation history using 'Previous Question:' format for context",
+            "- Use your expertise to determine next priority topic or completion readiness",
+            "- For devices: specify origin as \"user message\" since no files are involved",
+            "- Be conversational and responsive to their specific automation needs",
             "- No file processing needed - file_extractions always empty array"
         ])
         
@@ -72,11 +78,11 @@ Current Project Context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}
+{user_input_section}{conversation_context}
 
 {stage_instructions}
 
-TASK: Process the user input directly, update the context based on their message{" and MCQ responses" if mcq_responses else ""}, and provide appropriate response.{special_handling_section}
+TASK: Use your expertise to intelligently analyze the current context, assess requirements completion progress, update the context with structured information, and determine the most appropriate next action (ask follow-up questions or proceed to code generation).{special_handling_section}
 
 Return a JSON object with this EXACT structure:
 {{
@@ -89,7 +95,7 @@ Return a JSON object with this EXACT structure:
                 "origin": "user message"  // Options: "file", "user message", "internet", "internal knowledge base", "other"
             }}
         }},
-        "information": "Updated markdown summary - be GENEROUS with information storage. Include ALL relevant details from user input that could be useful throughout the automation project. Store requirements, preferences, constraints, goals, operational details, environmental factors, etc. Do NOT duplicate device constants here."
+        "information": "INTELLIGENTLY STRUCTURED markdown summary using the section headers provided in stage instructions (## Safety Requirements, ## I/O Specifications, etc.). Be GENEROUS with information storage - capture ALL relevant details from user input. Include requirements, preferences, constraints, goals, operational details, environmental factors, conversation history, etc. Use consistent markdown formatting to help future analysis. Do NOT duplicate device constants here."
     }},
     {expected_response_fields}
     "file_extractions": []
@@ -110,9 +116,6 @@ CRITICAL RULES:
         Template B: Optimized for user messages with files.
         Uses current prioritized approach with user input first, files supplementary.
         """
-        # Calculate current progress for requirements gathering
-        progress = PromptTemplates._calculate_requirements_progress(context) if stage == Stage.GATHERING_REQUIREMENTS else 0.0
-        
         # File content section (comes at the end)
         file_content_section = ""
         if extracted_file_texts:
@@ -133,7 +136,7 @@ Uploaded file content:
 """
         
         # Stage-specific instructions
-        stage_instructions, expected_response_fields = PromptTemplates._get_stage_instructions(stage, progress)
+        stage_instructions, expected_response_fields = PromptTemplates._get_stage_instructions(stage, context)
         
         # Prepare device constants for JSON serialization (handle DeviceEntry objects)
         device_constants_dict = {}
@@ -151,6 +154,11 @@ Uploaded file content:
         if mcq_responses:
             user_input_section += f"\nMCQ Responses: {mcq_responses}"
         
+        # Add conversation context for better response interpretation
+        conversation_context = ""
+        if context.information and "previous question:" in context.information.lower():
+            conversation_context = "\nCONVERSATION CONTEXT: The current context contains previous interaction history which should inform your response."
+        
         # Build special handling section (only if context is empty)
         special_handling_section = ""
         if context_is_empty:
@@ -158,16 +166,19 @@ Uploaded file content:
 SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
 If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
         
-        # Build critical rules (conditional based on context and inputs)
         critical_rules = []
         if context_is_empty:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
         critical_rules.extend([
-            "- Be GENEROUS with information storage - capture all potentially useful details from user input and file data",
+            "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
+            "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
+            "- Be GENEROUS with information storage using intelligent markdown section structure",
             "- Information should NOT duplicate device constants (those go in device_constants section)",
-            f"- User message{' and MCQ responses' if mcq_responses else ''} are PRIMARY - reference them directly in your response",
-            "- Only extract PLC-relevant information from files (devices, I/O, safety, control logic)",
-            "- Set origin=\"user message\" for devices from user input, origin=\"file\" for devices from uploaded files",
+            f"- User message{' and MCQ responses' if mcq_responses else ''} are PRIMARY - reference them directly",
+            "- Store conversation history using 'Previous Question:' format for context",
+            "- Use your expertise to determine next priority topic or completion readiness",
+            "- Extract only PLC-relevant information from files (devices, I/O, safety, control logic)",
+            "- Set origin=\"user message\" for user devices, origin=\"file\" for file-extracted devices",
             "- If no files uploaded, return empty file_extractions array"
         ])
         if mcq_responses:
@@ -179,11 +190,11 @@ Current Project Context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}
+{user_input_section}{conversation_context}
 
 {stage_instructions}
 
-TASK: Process the user input, update the context, extract any file data, and provide appropriate response.{special_handling_section}
+TASK: Use your expertise to intelligently analyze the current context and files, assess requirements completion progress, update the context with structured information, extract relevant file data, and determine the most appropriate next action.{special_handling_section}
 
 Return a JSON object with this EXACT structure:
 {{
@@ -196,7 +207,7 @@ Return a JSON object with this EXACT structure:
                 "origin": "user message"  // For user input devices, or "file" for file-extracted devices
             }}
         }},
-        "information": "Updated markdown summary - be GENEROUS with information storage. Include ALL relevant details from user input and file data that could be useful throughout the automation project. Store requirements, preferences, constraints, goals, operational details, environmental factors, etc. Do NOT duplicate device constants here."
+        "information": "INTELLIGENTLY STRUCTURED markdown summary using the section headers provided in stage instructions (## Safety Requirements, ## I/O Specifications, etc.). Be GENEROUS with information storage - capture ALL relevant details from user input and file data. Include requirements, preferences, constraints, goals, operational details, environmental factors, conversation history, etc. Use consistent markdown formatting to help future analysis. Do NOT duplicate device constants here."
     }},
     {expected_response_fields}
     "file_extractions": [
@@ -219,32 +230,67 @@ CRITICAL RULES:
 {chr(10).join(critical_rules)}{file_content_section}"""
     
     @staticmethod
-    def _get_stage_instructions(stage: Stage, progress: float = 0.0) -> tuple[str, str]:
+    def _get_stage_instructions(stage: Stage, context: Optional[ProjectContext] = None) -> tuple[str, str]:
         """Get stage-specific instructions and expected response fields."""
         
         if stage == Stage.GATHERING_REQUIREMENTS:
             stage_instructions = f"""
-STAGE: Requirements Gathering (Progress: {progress:.1%})
+STAGE: Requirements Gathering - LLM-Driven Intelligence
 
-Your primary task is to ask the next focused question to gather PLC programming requirements.
-Reference the user's input when appropriate to provide contextual follow-up questions.
+You are an expert PLC programming consultant conducting focused requirements gathering.
+Your task is to analyze the current context (device_constants + information), estimate progress, and help quickly surface the missing details needed to reach code generation.
 
-PRIORITIES (ask about missing items first):
-1. Safety requirements (emergency stops, protection)
-2. I/O specifications (inputs, outputs, sensors, actuators)  
-3. Control sequence basics
-4. PLC platform/hardware
-5. Communication requirements
+## INTELLIGENT ANALYSIS REQUIRED
+You must analyze the current context to:
+1. **ASSESS TOPIC COVERAGE**: Determine which requirement areas are well-covered vs need attention
+2. **ESTIMATE PROGRESS**: Provide your expert assessment of overall completion (0.0-1.0)
+3. **STRUCTURE INFORMATION**: Use intelligent markdown organization for easy future analysis
 
-Use MCQ for standardized choices (safety features, voltage levels, protocols, etc.).
+NOTE: The frontend controls whether to proceed to code generation based on the returned `gathering_requirements_estimated_progress`. You do not need to explicitly decide the next action — instead, focus on a clear progress estimate and targeted follow-up questions when required.
+
+## CORE REQUIREMENTS AREAS (use these as suggested markdown sections, but you may add or rename topics when appropriate)
+### 1. Safety Requirements 
+Emergency stops, safety interlocks, protection systems, SIL levels, hazard analysis
+### 2. I/O Specifications
+Digital/analog inputs/outputs, sensors, actuators, voltage levels, signal types, wiring
+### 3. Control Sequence & Logic
+Process flow, operational modes, timing requirements, interlocks, state machines
+### 4. PLC Platform & Hardware
+Brand preference, CPU model, expansion modules, memory, programming software
+### 5. Communication Requirements
+Network protocols, HMI connectivity, remote access, data exchange, diagnostics
+
+You may propose additional topic sections if they improve clarity or capture project-specific concerns.
+
+## INTELLIGENT MARKDOWN STRUCTURING
+Organize the `information` field with clear sections. Be concise but generous in capturing useful details so the gathering stage is efficient and fast.
+Aim to minimize the number of turn-backs: prefer MCQs where they help extract standardized choices quickly, but always allow free-text follow-up when nuance is needed.
+
+## INTELLIGENT PROGRESSION STRATEGY
+- **ANALYZE EXISTING CONTEXT**: Look at current information to understand what's already covered
+- **IDENTIFY GAPS**: Determine which areas need more detail or are completely missing
+- **PRIORITIZE FAST EXTRACTION**: Ask high-value questions (safety, I/O, platform) and use MCQs liberally to speed user responses
+- **ASK TARGETED QUESTIONS**: Craft specific questions or MCQs based on gaps and user's project type
+- **MCQ USAGE GUIDANCE**: Use MCQs generously for standardized choices (protocols, voltage, safety categories, common configuration options). Provide multi-select options when appropriate.
+
+## COMPLETION CRITERIA (be reasonably lenient to encourage flow)
+Set gathering_requirements_estimated_progress to:
+- **0.0-0.3**: Just starting, basic project understanding
+- **0.4-0.6**: Core areas identified, some details gathered
+- **0.7-0.8**: Most areas covered, refining details
+- **0.9**: Nearly complete, final clarifications
+- **1.0**: Ready for code generation (substantial coverage achieved)
+
+When you assess 1.0 completion, the frontend will automatically transition to code generation.
 """
             expected_response_fields = """
-    "chat_message": "Your question or response",
-    "is_mcq": false,
+    "chat_message": "Your expert question or response",
+    "is_mcq": null,
     "mcq_question": null,
     "mcq_options": [],
     "is_multiselect": false,
-    "generated_code": null,"""
+    "generated_code": null,
+    "gathering_requirements_estimated_progress": 0.7  // Your expert assessment (0.0-1.0) - set to 1.0 when ready for code generation"""
             
         elif stage == Stage.CODE_GENERATION:
             stage_instructions = """
@@ -297,47 +343,3 @@ Provide helpful responses for code refinement. You can:
     "generated_code": null,"""
         
         return stage_instructions, expected_response_fields
-    
-    @staticmethod
-    def _calculate_requirements_progress(context: ProjectContext) -> float:
-        """Calculate requirements gathering progress based on context."""
-        required_areas = ['safety', 'io', 'control', 'platform', 'communication']
-        completed_areas = 0
-        
-        # Convert device_constants to plain dict for string operations
-        device_constants_dict = {}
-        for device_name, device_info in context.device_constants.items():
-            if hasattr(device_info, 'model_dump'):  # It's a DeviceEntry
-                device_constants_dict[device_name] = device_info.model_dump()
-            else:  # It's legacy plain dict
-                device_constants_dict[device_name] = device_info
-        
-        device_constants_str = json.dumps(device_constants_dict).lower()
-        information_str = context.information.lower()
-        
-        # Check for safety requirements
-        if any(keyword in device_constants_str + information_str for keyword in 
-               ['safety', 'emergency', 'stop', 'interlock', 'protection']):
-            completed_areas += 1
-        
-        # Check for I/O specifications
-        if any(keyword in device_constants_str + information_str for keyword in 
-               ['input', 'output', 'sensor', 'actuator', 'digital', 'analog']):
-            completed_areas += 1
-        
-        # Check for control logic
-        if any(keyword in device_constants_str + information_str for keyword in 
-               ['control', 'sequence', 'logic', 'operation', 'process']):
-            completed_areas += 1
-        
-        # Check for platform/hardware
-        if any(keyword in device_constants_str + information_str for keyword in 
-               ['plc', 'platform', 'hardware', 'siemens', 'allen', 'schneider']):
-            completed_areas += 1
-        
-        # Check for communication
-        if any(keyword in device_constants_str + information_str for keyword in 
-               ['communication', 'protocol', 'modbus', 'ethernet', 'profinet']):
-            completed_areas += 1
-        
-        return completed_areas / len(required_areas)

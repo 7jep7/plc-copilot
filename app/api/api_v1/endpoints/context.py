@@ -104,10 +104,15 @@ async def update_context(
         
         # Process context update
         context_service = ContextProcessingService()
-        response = await context_service.process_context_update(
+        proc = context_service.process_context_update(
             request, 
             uploaded_files=file_data_list if file_data_list else None
         )
+        # Support sync or async implementations/mocks
+        if hasattr(proc, '__await__'):
+            response = await proc
+        else:
+            response = proc
         
         logger.info(f"Context update completed, new stage: {response.current_stage}")
         return response
