@@ -112,16 +112,21 @@ class ContextProcessingService:
             # Use AI to extract structured device information
             extraction_prompt = self._build_file_extraction_prompt(extracted_text)
             
-            response = await self.openai_service.chat_completion(
-                messages=[{"role": "user", "content": extraction_prompt}],
+            from app.schemas.openai import ChatRequest
+            request = ChatRequest(
+                user_prompt="",  # Will be overridden by messages
                 model="gpt-4o-mini",
                 temperature=0.3,
-                max_completion_tokens=1024
+                max_tokens=1024
+            )
+            response, usage = await self.openai_service.chat_completion(
+                request,
+                messages=[{"role": "user", "content": extraction_prompt}]
             )
             
             # Parse AI response into structured format
             try:
-                extracted_data = json.loads(response.content)
+                extracted_data = json.loads(response)
                 return FileProcessingResult(
                     extracted_devices=extracted_data.get("devices", {}),
                     extracted_information=extracted_data.get("information", ""),
@@ -206,15 +211,20 @@ class ContextProcessingService:
         # Build prompt to update context
         update_prompt = self._build_context_update_prompt(context, message, mcq_responses)
         
-        response = await self.openai_service.chat_completion(
-            messages=[{"role": "user", "content": update_prompt}],
-            model="gpt-4o-mini", 
+        from app.schemas.openai import ChatRequest
+        request = ChatRequest(
+            user_prompt="",  # Will be overridden by messages
+            model="gpt-4o-mini",
             temperature=0.3,
-            max_completion_tokens=1024
+            max_tokens=1024
+        )
+        response, usage = await self.openai_service.chat_completion(
+            request,
+            messages=[{"role": "user", "content": update_prompt}]
         )
         
         try:
-            updated_data = json.loads(response.content)
+            updated_data = json.loads(response)
             return ProjectContext(
                 device_constants=updated_data.get("device_constants", context.device_constants),
                 information=updated_data.get("information", context.information)
@@ -244,19 +254,24 @@ class ContextProcessingService:
         # Generate next question or MCQ
         question_prompt = self._build_requirements_question_prompt(context, progress)
         
-        response = await self.openai_service.chat_completion(
-            messages=[{"role": "user", "content": question_prompt}],
+        from app.schemas.openai import ChatRequest
+        request = ChatRequest(
+            user_prompt="",  # Will be overridden by messages
             model="gpt-4o-mini",
             temperature=0.7,
-            max_completion_tokens=512
+            max_tokens=512
+        )
+        response, usage = await self.openai_service.chat_completion(
+            request,
+            messages=[{"role": "user", "content": question_prompt}]
         )
         
         # Parse AI response for MCQ or regular question
         try:
-            ai_response = json.loads(response.content)
+            ai_response = json.loads(response)
             return ContextUpdateResponse(
                 updated_context=context,
-                chat_message=ai_response.get("message", response.content),
+                chat_message=ai_response.get("message", response),
                 gathering_requirements_progress=progress,
                 current_stage=Stage.GATHERING_REQUIREMENTS,
                 is_mcq=ai_response.get("is_mcq", False),
@@ -268,7 +283,7 @@ class ContextProcessingService:
             # Fallback to regular message
             return ContextUpdateResponse(
                 updated_context=context,
-                chat_message=response.content,
+                chat_message=response,
                 gathering_requirements_progress=progress,
                 current_stage=Stage.GATHERING_REQUIREMENTS,
                 is_mcq=False,
@@ -295,11 +310,16 @@ class ContextProcessingService:
         # Generate Structured Text based on context
         code_prompt = self._build_code_generation_prompt(context)
         
-        response = await self.openai_service.chat_completion(
-            messages=[{"role": "user", "content": code_prompt}],
+        from app.schemas.openai import ChatRequest
+        request = ChatRequest(
+            user_prompt="",  # Will be overridden by messages
             model="gpt-4o",  # Use more powerful model for code generation
             temperature=0.3,
-            max_completion_tokens=2048
+            max_tokens=2048
+        )
+        response, usage = await self.openai_service.chat_completion(
+            request,
+            messages=[{"role": "user", "content": code_prompt}]
         )
         
         return ContextUpdateResponse(
@@ -311,7 +331,7 @@ class ContextProcessingService:
             is_multiselect=False,
             mcq_question=None,
             mcq_options=[],
-            generated_code=response.content
+            generated_code=response
         )
     
     async def _handle_refinement_testing(
@@ -332,19 +352,24 @@ class ContextProcessingService:
         # Generate refinement response based on user input
         refinement_prompt = self._build_refinement_prompt(context, request.message)
         
-        response = await self.openai_service.chat_completion(
-            messages=[{"role": "user", "content": refinement_prompt}],
+        from app.schemas.openai import ChatRequest
+        request_obj = ChatRequest(
+            user_prompt="",  # Will be overridden by messages
             model="gpt-4o-mini",
             temperature=0.7,
-            max_completion_tokens=512
+            max_tokens=512
+        )
+        response, usage = await self.openai_service.chat_completion(
+            request_obj,
+            messages=[{"role": "user", "content": refinement_prompt}]
         )
         
         # Check if response should be MCQ
         try:
-            ai_response = json.loads(response.content)
+            ai_response = json.loads(response)
             return ContextUpdateResponse(
                 updated_context=context,
-                chat_message=ai_response.get("message", response.content),
+                chat_message=ai_response.get("message", response),
                 gathering_requirements_progress=None,
                 current_stage=Stage.REFINEMENT_TESTING,
                 is_mcq=ai_response.get("is_mcq", False),
@@ -355,7 +380,7 @@ class ContextProcessingService:
         except json.JSONDecodeError:
             return ContextUpdateResponse(
                 updated_context=context,
-                chat_message=response.content,
+                chat_message=response,
                 gathering_requirements_progress=None,
                 current_stage=Stage.REFINEMENT_TESTING,
                 is_mcq=False,
