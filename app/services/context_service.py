@@ -83,11 +83,17 @@ class ContextProcessingService:
         
         # Generate AI response based on stage
         if request.current_stage == Stage.CODE_GENERATION:
-            return await self._handle_code_generation(updated_context, request.current_stage)
+            resp = await self._handle_code_generation(updated_context, request.current_stage)
+            resp.file_extractions = file_extractions
+            return resp
         elif request.current_stage == Stage.REFINEMENT_TESTING:
-            return await self._handle_refinement_testing(updated_context, request)
+            resp = await self._handle_refinement_testing(updated_context, request)
+            resp.file_extractions = file_extractions
+            return resp
         else:  # GATHERING_REQUIREMENTS
-            return await self._handle_requirements_gathering(updated_context, request)
+            resp = await self._handle_requirements_gathering(updated_context, request)
+            resp.file_extractions = file_extractions
+            return resp
     
     async def _process_uploaded_file(self, file_data: BytesIO) -> FileProcessingResult:
         """
@@ -649,28 +655,50 @@ Make the code complete, compilable, and well-documented.
     def _build_refinement_prompt(self, context: ProjectContext, user_message: Optional[str]) -> str:
         """Build prompt for refinement stage responses."""
         return f"""
-You are in the refinement/testing stage helping improve PLC code and requirements.
+    You are in the refinement/testing stage helping improve PLC code and requirements.
 
-Current context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Information: {context.information}
+    Current context:
+    Device Constants: {json.dumps(context.device_constants, indent=2)}
+    Information: {context.information}
 
-User message: {user_message or "No specific message"}
+    User message: {user_message or "No specific message"}
 
-Provide helpful response for code refinement. You can:
-- Suggest improvements
-- Ask clarifying questions (use MCQ for standard choices)
-- Provide technical guidance
-- Help with testing scenarios
+    Provide a helpful response for code refinement. You can:
+    - Suggest improvements
+    - Ask clarifying questions (use MCQ for standard choices)
+    - Provide technical guidance
+    - Help with testing scenarios
 
-Return JSON format:
-{{
-    "message": "Your response",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false
-}}
+    Return JSON in one of these exact formats:
 
-Keep responses focused and actionable.
-"""
+    For a regular response:
+    {{
+        "message": "Your response",
+        "is_mcq": false,
+        "mcq_question": null,
+        "mcq_options": [],
+        "is_multiselect": false
+    }}
+
+    For a multiple choice question (MCQ) with exclusively one select answer:
+    {{
+        "message": "Brief intro if needed",
+        "is_mcq": true,
+        "mcq_question": "Clear, specific question",
+        "mcq_options": ["Option 1", "Option 2", "Option 3"],
+        "is_multiselect": false
+    }}
+
+    For a multi-select MCQ:
+    {{
+        "message": "Brief intro if needed",
+        "is_mcq": true,
+        "mcq_question": "Clear, specific question",
+        "mcq_options": ["Option 1", "Option 2", "Option 3"],
+        "is_multiselect": true
+    }}
+
+    Set "is_mcq" to true if you provide an MCQ. If it is a multi-select MCQ, also set "is_multiselect" to true.
+
+    Keep responses focused and actionable.
+    """

@@ -85,6 +85,10 @@ class ContextUpdateResponse(BaseModel):
         None,
         description="Generated Structured Text code (only when current_stage=code_generation)"
     )
+    file_extractions: List["FileProcessingResult"] = Field(
+        default_factory=list,
+        description="List of file extraction results (one per uploaded file)"
+    )
 
 
 class FileProcessingResult(BaseModel):
