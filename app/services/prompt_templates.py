@@ -1,3 +1,114 @@
+"""Prompt templates for different conversation stages in PLC-Copilot."""
+
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional
+from app.schemas.conversation import ConversationStage, ConversationState, ConversationMessage
+from app.core.models import ModelConfig
+
+
+class PromptTemplate(ABC):
+    """Base class for stage-specific prompt templates."""
+    
+    @abstractmethod
+    def build_system_prompt(self, state: ConversationState) -> str:
+        """Build the system prompt for this stage."""
+        pass
+    
+    @abstractmethod
+    def build_user_prompt(self, message: str, state: ConversationState) -> str:
+        """Build the user prompt for this stage."""
+        pass
+    
+    def get_model_config(self) -> Dict[str, Any]:
+        """Get model configuration for this stage."""
+        return ModelConfig.CONVERSATION_CONFIG
+    
+    def _build_document_context(self, state: ConversationState, context_type: str = "general") -> str:
+        """Build document context for inclusion in prompts."""
+        if not state.extracted_documents:
+            return ""
+        
+        # Import here to avoid circular imports
+        from app.services.conversation_document_service import DocumentInfo
+        
+        # Convert dict documents back to DocumentInfo objects
+        documents = [DocumentInfo.from_dict(doc_data) for doc_data in state.extracted_documents]
+        
+        if not documents:
+            return ""
+        
+        context_parts = ["\n**📄 DOCUMENT CONTEXT:**"]
+        
+        for doc in documents:
+            doc_summary = [f"- **{doc.filename}** ({doc.document_type})"]
+            
+            # Add device information
+            if doc.device_info:
+                device_parts = []
+                if doc.device_info.get("manufacturer"):
+                    device_parts.append(doc.device_info["manufacturer"])
+                if doc.device_info.get("model"):
+                    device_parts.append(doc.device_info["model"])
+                if device_parts:
+                    doc_summary.append(f"Device: {' '.join(device_parts)}")
+            
+            # Add context-specific information
+            if context_type == "requirements" and doc.plc_analysis:
+                if doc.plc_analysis.get("key_specifications"):
+                    specs = doc.plc_analysis["key_specifications"]
+                    if isinstance(specs, list) and specs:
+                        doc_summary.append(f"Key specs: {', '.join(specs[:3])}")
+                
+                if doc.plc_analysis.get("io_requirements"):
+                    io_reqs = doc.plc_analysis["io_requirements"]
+                    if isinstance(io_reqs, list) and io_reqs:
+                        doc_summary.append(f"I/O requirements: {', '.join(io_reqs[:2])}")
+            
+            elif context_type == "generation" and doc.plc_analysis:
+                if doc.plc_analysis.get("plc_integration_points"):
+                    integration = doc.plc_analysis["plc_integration_points"]
+                    if isinstance(integration, list) and integration:
+                        doc_summary.append(f"Integration points: {', '.join(integration[:3])}")
+                
+                if doc.plc_analysis.get("technical_parameters"):
+                    params = doc.plc_analysis["technical_parameters"]
+                    if isinstance(params, dict):
+                        param_list = [f"{k}: {v}" for k, v in list(params.items())[:2]]
+                        if param_list:
+                            doc_summary.append(f"Parameters: {', '.join(param_list)}")
+            
+            # Add a brief content preview for very relevant documents
+            if len(doc.raw_text) < 3000:  # For shorter, more focused documents
+                content_lines = doc.raw_text.split('\n')[:8]
+                meaningful_lines = [line.strip() for line in content_lines if line.strip() and len(line.strip()) > 15]
+                if meaningful_lines:
+                    doc_summary.append(f"Content preview: {' | '.join(meaningful_lines[:2])}")
+            
+            context_parts.append(" | ".join(doc_summary))
+        
+        context_parts.append("")  # Add spacing
+        return "\n".join(context_parts)
+    
+    def _should_suggest_document_upload(self, state: ConversationState, user_message: str) -> Optional[str]:
+        """Determine if document upload should be suggested based on conversation context."""
+        if state.extracted_documents:
+            return None  # Already have documents
+        
+        user_msg_lower = user_message.lower()
+        
+        # Keywords that suggest documents would be helpful
+        device_keywords = ["camera", "sensor", "motor", "drive", "controller", "plc", "hmi", "valve", "actuator"]
+        spec_keywords = ["datasheet", "manual", "specification", "catalog", "brochure"]
+        
+        if any(keyword in user_msg_lower for keyword in device_keywords):
+            return "💡 Consider uploading device datasheets or manuals to help me understand the specific technical requirements and create more accurate Structured Text code."
+        
+        if any(keyword in user_msg_lower for keyword in spec_keywords):
+            return "📄 Please upload the relevant documents to help me analyze the technical specifications for your Structured Text implementation."
+        
+        return None
+
+
 # All instances of "ST" in prompt strings have been replaced with "Structured Text" (except where "ST" is part of a code/data type, e.g., "ST code", "ST variable", etc. Those are also replaced with "Structured Text code", "Structured Text variable", etc.)
 
 class ProjectKickoffTemplate(PromptTemplate):
