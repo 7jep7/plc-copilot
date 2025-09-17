@@ -643,12 +643,6 @@ The new Context API provides all the functionality of the legacy system with sig
 2. **Manual editing**: Direct code modifications with real-time validation
 3. **Testing feedback**: Run simulations and iterate based on results
 
-**Testing Features**:
-- Digital twin simulation with visual feedback
-- Automated robustness testing
-- Edge case scenario validation
-- Performance optimization suggestions
-
 ### Conversation Management
 
 PLC Copilot provides two API approaches for different use cases:
@@ -886,7 +880,7 @@ plc-copilot/
 - **Validation**: Pydantic for request/response validation
 - **Logging**: Structured logging with structlog
 - **Monitoring**: Sentry for error tracking (optional)
-- **Deployment**: Render.com with Gunicorn + Uvicorn workers
+- **Deployment**: Render.com with Docker containerization
 
 ## Document Processing Pipeline
 
@@ -920,7 +914,7 @@ for page_num in range(doc.page_count):
 
 **Single-pass processing** using **GPT-4o**:
 - **Temperature 0.3** for consistent technical analysis
-- **8KB content limit** per document for cost efficiency
+- Documents are truncated to **8000 characters** (≈8 KB) per document before being included in prompts to control token usage. This is characters, not tokens. 8000 characters roughly corresponds to **4–8 pages** of typical datasheet or marketing PDF content (page count depends on layout, tables and figures — estimate ~1000–2000 characters of readable text per page). If you need the entire document analysed, provide a short human-prepared summary or split the PDF into smaller parts; for more accurate token budgeting consider switching to a token-based truncation (e.g., via tiktoken).
 - **Structured extraction** of PLC-relevant specifications
 
 **Extracted Information:**
@@ -1169,7 +1163,7 @@ Using Swagger: visit `http://localhost:8000/docs`, open `POST /api/v1/ai/chat`, 
 
 ```json
 {
-  "user_prompt": "Explain emergency stop logic for a conveyor",
+  "user_prompt": "Explain PLC ladder logic basics",
   "model": "gpt-4o-mini",
   "temperature": 1.0,
   "max_tokens": 128
@@ -1434,12 +1428,6 @@ Content-Type: application/json
 }
 ```
 
-**Critical Frontend MCQ Handling:**
-- When `is_mcq` is true, display ONLY `mcq_question` and `mcq_options` to user
-- Avoid displaying full `response` text alongside MCQ to prevent cognitive overload
-- Provide clean, focused interface for user selection
-```
-
 #### Get Conversation State
 ```http
 GET /api/v1/conversations/{conversation_id}
@@ -1640,112 +1628,3 @@ async function apiCall(url: string, options: RequestInit) {
   }
 }
 ```
-```
-    ```json
-    {
-      "model": "gpt-4o-mini",
-      "content": "string",
-      "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
-    }
-    ```
-
-### Document Management
-- POST /api/v1/documents/upload
-  - Upload a PDF file (multipart/form-data) with key `file`. Returns created `Document` metadata.
-- GET /api/v1/documents/
-  - List documents. Query params: `skip`, `limit`.
-- POST /api/v1/documents/{id}/process
-  - Process the uploaded document to extract PLC-relevant context.
-
-### PLC Code Generation
-- POST /api/v1/plc/generate
-  - Request JSON (PLCGenerationRequest): includes `user_prompt`, `language` (e.g., `structured_text`), `max_tokens`, `temperature`, and flags like `include_io_definitions`.
-  - Response JSON: `PLCCodeResponse` — contains `source_code`, `id`, `language`, `generated_at`, and metadata.
-
-### Digital Twin
-- POST /api/v1/digital-twin/
-  - Create a digital twin simulation record; accept PLC code id and parameters.
-- POST /api/v1/digital-twin/{id}/test
-  - Run a simulation test. Returns run results and logs.
-
-### System
-- GET /health — useful for readiness/liveness checks by load balancers.
-
-Notes on authentication and security:
-- The backend currently expects trusted clients or deployment-level protection. Add an API authentication layer (JWT or API keys) for production.
-- Do not store secrets in client-side code or public repositories. Use `.env` or platform secrets (Render, Docker secrets, etc.).
-
-## SDK Generation
-
-FastAPI automatically generates an OpenAPI JSON at `/openapi.json`. Use it to generate client SDKs for any language:
-
-**Python Client:**
-```bash
-pip install openapi-python-client
-openapi-python-client generate --url http://localhost:8000/openapi.json
-```
-
-**TypeScript Client:**
-```bash
-openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o ./frontend-client
-```
-
-## Next Steps
-
-This backend provides a complete foundation for PLC automation workflows:
-
-- ✅ **Multi-stage conversation system** for guided PLC development
-- ✅ **Stage-aware AI prompts** for technical accuracy
-- ✅ **Flexible API design** supporting both workflows and ad-hoc queries
-- ✅ **Production-ready deployment** with comprehensive error handling
-- ✅ **Frontend integration examples** with TypeScript patterns
-
-**For Production:**
-1. **Deploy to Render.com** using included `render.yaml` configuration
-2. **Add Supabase persistence** for conversation state (beyond MVP)
-3. **Implement authentication** (JWT/API keys) for security
-4. **Scale workers** based on usage patterns
-
-**For Development:**
-1. **Follow frontend integration guide** in the API documentation section
-2. **Use conversation endpoints** for full workflow features
-3. **Test with provided examples** and Swagger UI at `/docs`
-4. **Extend prompt templates** for domain-specific requirements
-
-## Future Optimizations
-
-### 💰 OpenAI API Cost Reduction
-
-The current implementation sends full conversation context with every API call, which provides excellent context awareness but can be expensive at scale. Future optimizations include:
-
-**📉 Token Usage Reduction:**
-- **Truncate History**: Send only recent or relevant messages to reduce token usage
-- **Summarize Context**: Use API to summarize past conversation, replacing long history with a concise summary
-- **Use System Messages**: Define chatbot role in system message to avoid repeating in every request
-- **Monitor Tokens**: Track usage with tools like `tiktoken` and optimize input to stay cost-efficient
-
-**🎯 Smart Context Management:**
-- **Stage-Specific Context**: Only send relevant context for current conversation stage
-- **Document Context Caching**: Cache processed document summaries to avoid reprocessing
-- **Incremental Updates**: Track context changes and send only deltas when possible
-- **Context Compression**: Compress older conversation turns into concise summaries
-
-**💡 Implementation Priority:**
-1. **Message Window Reduction** (easy win: 60-80% token reduction)
-2. **Stage-Specific Context Filtering** (medium complexity, high impact)
-3. **OpenAI Assistants API Integration** (complex but enables persistent conversation threads)
-
-Current cost: ~1,000-6,000 tokens per interaction. Target: ~300-1,500 tokens per interaction.
-
-## Dependencies
-
-### Technology Stack
-
-**Core Framework**: FastAPI with Uvicorn/Gunicorn deployment  
-**Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations  
-**AI Integration**: OpenAI GPT models for conversation and code generation  
-**Document Processing**: pdfplumber, PyMuPDF, PyPDF2 for PDF parsing  
-**Background Tasks**: Celery with Redis for async processing  
-**Deployment**: Render.com with Docker containerization  
-
-**LangChain**: Currently included in dependencies for future RAG (Retrieval-Augmented Generation) integration with the Code Library feature. Not actively used in MVP but retained for planned semantic search and intelligent code retrieval capabilities.
