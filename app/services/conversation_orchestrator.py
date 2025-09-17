@@ -49,6 +49,25 @@ class ConversationOrchestrator:
                 content=request.message,
                 attachments=request.attachments or []
             )
+            
+            # If this is an MCQ response, format the message to include selected options
+            if request.mcq_response:
+                mcq_data = request.mcq_response
+                question = mcq_data.get("question", "")
+                selected_options = mcq_data.get("selected_options", [])
+                
+                if selected_options:
+                    if len(selected_options) == 1:
+                        formatted_response = f"Selected: {selected_options[0]}"
+                    else:
+                        formatted_response = f"Selected: {', '.join(selected_options)}"
+                    
+                    # Include both the question context and the selection
+                    if question:
+                        user_message.content = f"Question: {question}\n{formatted_response}\n\nUser message: {request.message}"
+                    else:
+                        user_message.content = f"{formatted_response}\n\nUser message: {request.message}"
+            
             conversation.messages.append(user_message)
             
             # Detect current stage (if not forced)
@@ -63,7 +82,7 @@ class ConversationOrchestrator:
                 await self._transition_to_stage(conversation, target_stage)
             
             # Process message in current stage
-            response = await self._process_stage_message(conversation, request.message)
+            response = await self._process_stage_message(conversation, request)
             
             # Add assistant response to history
             assistant_message = ConversationMessage(
@@ -170,7 +189,7 @@ class ConversationOrchestrator:
             to_stage=new_stage
         )
     
-    async def _process_stage_message(self, conversation: ConversationState, message: str) -> ConversationResponse:
+    async def _process_stage_message(self, conversation: ConversationState, request: ConversationRequest) -> ConversationResponse:
         """Process message according to current conversation stage."""
         
         stage = conversation.current_stage
@@ -180,7 +199,7 @@ class ConversationOrchestrator:
         
         # Build prompts
         system_prompt = template.build_system_prompt(conversation)
-        user_prompt = template.build_user_prompt(message, conversation)
+        user_prompt = template.build_user_prompt(request.message, conversation)
         
         # Get model configuration
         model_config = template.get_model_config()
@@ -199,6 +218,14 @@ class ConversationOrchestrator:
         
         # Add recent conversation history for context (last 10 messages)
         recent_messages = conversation.messages[-10:]  # Limit to avoid token overflow
+        
+        # TODO: Build intelligent context summary if conversation is getting long
+        # This will be implemented later using LLMs for better summarization
+        # if len(conversation.messages) > 20:
+        #     context_summary = self._build_context_summary(conversation)
+        #     if context_summary:
+        #         messages.append({"role": "system", "content": f"CONTEXT SUMMARY:\n{context_summary}"})
+        
         for msg in recent_messages[:-1]:  # Exclude the current message we just added
             messages.append({
                 "role": msg.role.value,
@@ -223,7 +250,7 @@ class ConversationOrchestrator:
             response_content = f"I apologize, but I encountered an error processing your request: {str(e)}"
         
         # Update stage-specific state based on response
-        await self._update_stage_state(conversation, message, response_content)
+        await self._update_stage_state(conversation, request, response_content)
         
         # Parse MCQ information if present
         mcq_data = self._parse_mcq_from_response(response_content)
@@ -234,9 +261,11 @@ class ConversationOrchestrator:
         # Parse requirements gathering progress
         progress_data = self._parse_requirements_progress(response_content, conversation.current_stage)
         
-        # For MCQ responses, simplify the chat message to just be the question
+        # For MCQ responses, use the parsed chat message (which should exclude options)
+        # If no chat_message tags found, fall back to the question text only
         final_chat_message = parsed_content["chat_message"]
-        if mcq_data["is_mcq"] and mcq_data["question"]:
+        if mcq_data["is_mcq"] and not parsed_content.get("chat_message_found", False):
+            # If no explicit chat_message was provided, use just the question
             final_chat_message = mcq_data["question"]
         
         # Determine next suggested stage
@@ -260,10 +289,11 @@ class ConversationOrchestrator:
         
         return response
     
-    async def _update_stage_state(self, conversation: ConversationState, user_message: str, ai_response: str):
+    async def _update_stage_state(self, conversation: ConversationState, request: ConversationRequest, ai_response: str):
         """Update stage-specific state based on the interaction."""
         
         stage = conversation.current_stage
+        user_message = request.message
         
         if stage == ConversationStage.PROJECT_KICKOFF:
             if not conversation.requirements:
@@ -280,8 +310,32 @@ class ConversationOrchestrator:
                 questions = [q.strip() for q in ai_response.split("?") if q.strip()]
                 conversation.qa.questions_asked.extend(questions)
             
-            # Record user answer
-            conversation.qa.answers_received.append(user_message)
+            # Record user answer with MCQ context if available
+            if request.mcq_response:
+                mcq_data = request.mcq_response
+                question = mcq_data.get("question", "")
+                selected_options = mcq_data.get("selected_options", [])
+                
+                # Format MCQ answer for better context
+                if selected_options:
+                    if len(selected_options) == 1:
+                        formatted_answer = f"MCQ Answer: {selected_options[0]}"
+                    else:
+                        formatted_answer = f"MCQ Answers: {', '.join(selected_options)}"
+                    
+                    if question:
+                        formatted_answer = f"Q: {question} | A: {', '.join(selected_options)}"
+                    
+                    conversation.qa.answers_received.append(formatted_answer)
+                    
+                    # Also store the original message if it adds context
+                    if user_message.strip() and user_message.strip() != formatted_answer:
+                        conversation.qa.answers_received.append(f"Additional context: {user_message}")
+                else:
+                    conversation.qa.answers_received.append(user_message)
+            else:
+                # Regular non-MCQ answer
+                conversation.qa.answers_received.append(user_message)
         
         elif stage == ConversationStage.CODE_GENERATION:
             if not conversation.generation:
@@ -484,7 +538,8 @@ class ConversationOrchestrator:
         Returns:
             dict: {
                 "code": str or None,
-                "chat_message": str (cleaned response)
+                "chat_message": str (cleaned response),
+                "chat_message_found": bool (whether explicit chat_message tags were found)
             }
         """
         import re
@@ -492,7 +547,8 @@ class ConversationOrchestrator:
         # Initialize default response
         parsed_data = {
             "code": None,
-            "chat_message": response  # Default to full response
+            "chat_message": response,  # Default to full response
+            "chat_message_found": False
         }
         
         # Extract code block
@@ -508,6 +564,7 @@ class ConversationOrchestrator:
         
         if chat_match:
             parsed_data["chat_message"] = chat_match.group(1).strip()
+            parsed_data["chat_message_found"] = True
         elif code_match:
             # If we have code but no chat_message tag, remove the code tags from response
             cleaned_response = re.sub(code_pattern, '', response, flags=re.DOTALL)
@@ -518,10 +575,66 @@ class ConversationOrchestrator:
             # Remove any remaining <code> and <chat_message> tags
             cleaned = re.sub(r'</?code>', '', parsed_data["chat_message"])
             cleaned = re.sub(r'</?chat_message>', '', cleaned)
+            
+            # Remove MCQ content from chat message since it's shown separately
+            mcq_pattern = r'\*\*MCQ_START\*\*(.*?)\*\*MCQ_END\*\*'
+            cleaned = re.sub(mcq_pattern, '', cleaned, flags=re.DOTALL)
+            
+            # Clean up extra whitespace
+            cleaned = re.sub(r'\n\s*\n', '\n\n', cleaned)
             parsed_data["chat_message"] = cleaned.strip()
         
         return parsed_data
     
+    # TODO: Implement LLM-based context summarization in the future
+    # def _build_context_summary(self, conversation: ConversationState) -> str:
+    #     """Build intelligent context summary preserving key Structured Text information."""
+    #     summary_parts = []
+    #     
+    #     # Project Overview
+    #     if conversation.requirements and conversation.requirements.user_query:
+    #         summary_parts.append(f"PROJECT: {conversation.requirements.user_query}")
+    #     
+    #     # Key Requirements (from Q&A)
+    #     if conversation.qa and conversation.qa.answers_received:
+    #         key_answers = []
+    #         for answer in conversation.qa.answers_received[-10:]:  # Last 10 answers
+    #             if any(keyword in answer.lower() for keyword in [
+    #                 'safety', 'voltage', 'current', 'speed', 'temperature', 'pressure',
+    #                 'protocol', 'plc', 'input', 'output', 'sensor', 'actuator', 'motor'
+    #             ]):
+    #                 key_answers.append(answer)
+    #         
+    #         if key_answers:
+    #             summary_parts.append(f"KEY REQUIREMENTS:\n- " + "\n- ".join(key_answers[:5]))
+    #     
+    #     # Document Context
+    #     if conversation.extracted_documents:
+    #         doc_summaries = []
+    #         for doc_data in conversation.extracted_documents:
+    #             filename = doc_data.get('filename', 'Unknown')
+    #             doc_type = doc_data.get('document_type', 'UNKNOWN')
+    #             device_info = doc_data.get('device_info', {})
+    #             
+    #             if device_info.get('manufacturer') or device_info.get('model'):
+    #                 device_str = f"{device_info.get('manufacturer', '')} {device_info.get('model', '')}".strip()
+    #                 doc_summaries.append(f"{filename} ({doc_type}): {device_str}")
+    #             else:
+    #                 doc_summaries.append(f"{filename} ({doc_type})")
+    #         
+    #         if doc_summaries:
+    #             summary_parts.append(f"DOCUMENTS:\n- " + "\n- ".join(doc_summaries))
+    #     
+    #     # Generated Code Status
+    #     if conversation.generation and conversation.generation.generated_code:
+    #         summary_parts.append("STATUS: Structured Text code has been generated")
+    #     
+    #     # Current Stage Progress
+    #     stage_info = f"STAGE: {conversation.current_stage.value}"
+    #     summary_parts.append(stage_info)
+    #     
+    #     return "\n\n".join(summary_parts) if summary_parts else ""
+
     def _parse_requirements_progress(self, response: str, current_stage) -> Dict[str, Any]:
         """
         Parse requirements gathering progress from AI response.

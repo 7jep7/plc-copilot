@@ -129,6 +129,8 @@ class ConversationRequest(BaseModel):
     attachments: Optional[List[str]] = None
     force_stage: Optional[ConversationStage] = None
     context: Optional[Dict[str, Any]] = None
+    # MCQ response handling
+    mcq_response: Optional[Dict[str, Any]] = None  # {"question": str, "selected_options": List[str], "is_multiselect": bool}
 
 
 class ConversationResponse(BaseModel):
