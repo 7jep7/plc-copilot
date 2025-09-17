@@ -9,7 +9,7 @@ This module defines the data structures for the context-based approach where:
 
 from __future__ import annotations
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -20,11 +20,32 @@ class Stage(str, Enum):
     REFINEMENT_TESTING = "refinement_testing"
 
 
+class DeviceOrigin(str, Enum):
+    """Source of device information."""
+    FILE = "file"
+    USER_MESSAGE = "user message"
+    INTERNET = "internet"
+    INTERNAL_KNOWLEDGE_BASE = "internal knowledge base"
+    OTHER = "other"
+
+
+class DeviceEntry(BaseModel):
+    """Device entry with origin tracking."""
+    data: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Device specifications and properties"
+    )
+    origin: DeviceOrigin = Field(
+        DeviceOrigin.OTHER,
+        description="Source of this device information"
+    )
+
+
 class ProjectContext(BaseModel):
     """Complete project context structure."""
-    device_constants: Dict[str, Any] = Field(
+    device_constants: Dict[str, Union[DeviceEntry, Any]] = Field(
         default_factory=dict,
-        description="Flexible nested JSON for device specifications, I/O configs, safety systems, etc."
+        description="Device specifications with origin tracking. Keys are device names, values are DeviceEntry objects or legacy flexible data."
     )
     information: str = Field(
         default="",

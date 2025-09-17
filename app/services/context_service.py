@@ -1,14 +1,28 @@
 """
-Context processing service for the unified context-centric API.
+Context service for unified API approach.
 
-This service handles:
-- Context updates and integration
-- AI-driven progress calculation 
-- File processing and extraction
-- Context compression and optimization
+Features:
+- Single LLM call per interaction (reduced latency)
 - Stage-aware prompting and responses
-- Structured Text generation
+- File processing and extraction
+- MCQ support and progress tracking
+- Template selection based on file presence
 """
+
+import json
+import re
+from typing import Dict, List, Optional, Any, Tuple
+from urllib.parse import urljoin
+
+from app.core.config import settings
+from app.core.logging import get_logger
+from app.schemas.context import (
+    ProjectContext, ContextUpdateRequest, ContextUpdateResponse, Stage, 
+    FileProcessingResult, DeviceEntry, DeviceOrigin
+)
+from app.services.openai_service import OpenAIService
+from app.services.document_service import DocumentService
+from app.services.prompt_templates import PromptTemplates
 
 import json
 import logging
@@ -95,14 +109,24 @@ class ContextProcessingService:
         Returns:
             Complete context update response
         """
-        # Build comprehensive prompt
-        comprehensive_prompt = self._build_comprehensive_prompt(
-            request.current_context,
-            request.current_stage,
-            request.message,
-            request.mcq_responses,
-            extracted_file_texts
-        )
+        # Build comprehensive prompt using appropriate template
+        if extracted_file_texts:
+            # Template B: For messages with files
+            comprehensive_prompt = PromptTemplates.build_template_b_prompt(
+                context=request.current_context,
+                stage=request.current_stage,
+                user_message=request.message,
+                mcq_responses=request.mcq_responses,
+                extracted_file_texts=extracted_file_texts
+            )
+        else:
+            # Template A: For messages without files
+            comprehensive_prompt = PromptTemplates.build_template_a_prompt(
+                context=request.current_context,
+                stage=request.current_stage,
+                user_message=request.message,
+                mcq_responses=request.mcq_responses
+            )
         
         # Single LLM call with higher token limit for comprehensive response
         from app.schemas.openai import ChatRequest
@@ -151,7 +175,7 @@ class ContextProcessingService:
             # Calculate progress for requirements gathering
             progress = None
             if request.current_stage == Stage.GATHERING_REQUIREMENTS:
-                progress = self._calculate_requirements_progress(updated_context)
+                progress = PromptTemplates._calculate_requirements_progress(updated_context)
             
             return ContextUpdateResponse(
                 updated_context=updated_context,
@@ -222,56 +246,6 @@ class ContextProcessingService:
             information=updated_info
         )
     
-    def _calculate_requirements_progress(self, context: ProjectContext) -> float:
-        """
-        Calculate requirements gathering progress based on context completeness.
-        
-        Args:
-            context: Current project context
-            
-        Returns:
-            Progress value between 0.0 and 1.0
-        """
-        # Essential elements for PLC code generation
-        essential_items = [
-            "device_constants",  # Has some device specifications
-            "safety_requirements",  # Safety info in information or devices
-            "io_specifications",  # I/O information
-            "basic_sequence",  # Some process description
-            "control_logic"  # Basic control requirements
-        ]
-        
-        score = 0.0
-        total_items = len(essential_items)
-        
-        # Check device_constants existence and depth
-        if context.device_constants:
-            score += 0.3  # Base score for having any devices
-            # Bonus for nested structure complexity
-            total_keys = len(self._flatten_dict(context.device_constants).keys())
-            if total_keys > 5:
-                score += 0.2
-        
-        # Check information content for key terms
-        info_lower = context.information.lower()
-        
-        # Safety requirements
-        if any(term in info_lower for term in ["safety", "emergency", "stop", "protection"]):
-            score += 0.15
-        
-        # I/O specifications  
-        if any(term in info_lower for term in ["input", "output", "sensor", "actuator", "i/o"]):
-            score += 0.15
-        
-        # Process/sequence information
-        if any(term in info_lower for term in ["sequence", "process", "step", "operation", "control"]):
-            score += 0.1
-        
-        # Control logic details
-        if any(term in info_lower for term in ["logic", "program", "algorithm", "function"]):
-            score += 0.1
-        
-        return min(score, 1.0)
     
     def _extract_text_from_bytes(self, file_bytes: bytes) -> str:
         """
@@ -335,146 +309,6 @@ class ContextProcessingService:
                 items.append((new_key, v))
         return dict(items)
     
-    def _build_comprehensive_prompt(
-        self,
-        context: ProjectContext,
-        stage: Stage,
-        user_message: Optional[str],
-        mcq_responses: List[str],
-        extracted_file_texts: List[str]
-    ) -> str:
-        """Build comprehensive prompt that handles everything in one LLM call."""
-        
-        # Calculate current progress for requirements gathering
-        progress = self._calculate_requirements_progress(context) if stage == Stage.GATHERING_REQUIREMENTS else 0.0
-        
-        # File content section (comes at the end)
-        file_content_section = ""
-        if extracted_file_texts:
-            # Truncate file content but not too aggressively (8000 chars to preserve important info)
-            combined_file_text = "\n\n--- FILE SEPARATOR ---\n\n".join(extracted_file_texts)
-            max_file_content = 8000
-            if len(combined_file_text) > max_file_content:
-                combined_file_text = combined_file_text[:max_file_content] + "...[truncated]"
-            
-            file_content_section = f"""
-
-=== SUPPLEMENTARY FILE DATA ===
-NOTE: The user's message and MCQ responses above are MORE IMPORTANT than file content.
-Use file content as additional context only.
-
-Uploaded file content:
-{combined_file_text}
-"""
-
-        # Stage-specific instructions
-        stage_instructions = ""
-        expected_response_fields = ""
-        
-        if stage == Stage.GATHERING_REQUIREMENTS:
-            stage_instructions = f"""
-STAGE: Requirements Gathering (Progress: {progress:.1%})
-
-Your primary task is to ask the next focused question to gather PLC programming requirements.
-Reference the user's input when appropriate to provide contextual follow-up questions.
-
-PRIORITIES (ask about missing items first):
-1. Safety requirements (emergency stops, protection)
-2. I/O specifications (inputs, outputs, sensors, actuators)  
-3. Control sequence basics
-4. PLC platform/hardware
-5. Communication requirements
-
-Use MCQ for standardized choices (safety features, voltage levels, protocols, etc.).
-"""
-            expected_response_fields = """
-    "chat_message": "Your question or response",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false,
-    "generated_code": null,"""
-            
-        elif stage == Stage.CODE_GENERATION:
-            stage_instructions = """
-STAGE: Code Generation
-
-Generate complete, production-ready Structured Text (ST) code including:
-- Variable declarations (inputs, outputs, internal variables)
-- Function blocks and programs
-- Main control logic with safety interlocks
-- Error handling and clear comments
-
-Structure: TYPE declarations → PROGRAM → VAR sections → Main logic → Safety/error handling
-
-CRITICAL: The Structured Text code must be properly escaped as a JSON string value.
-"""
-            expected_response_fields = """
-    "chat_message": "I've generated the Structured Text code based on your requirements. You can now review and refine it.",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false,
-    "generated_code": "PROGRAM Main\\nVAR\\n  // Variable declarations\\nEND_VAR\\n\\n// Main logic\\n\\nEND_PROGRAM","""
-            
-        elif stage == Stage.REFINEMENT_TESTING:
-            stage_instructions = """
-STAGE: Refinement and Testing
-
-Provide helpful responses for code refinement. You can:
-- Suggest improvements
-- Ask clarifying questions (use MCQ for standard choices)
-- Provide technical guidance
-- Help with testing scenarios
-"""
-            expected_response_fields = """
-    "chat_message": "Your response",
-    "is_mcq": false,
-    "mcq_question": null,
-    "mcq_options": [],
-    "is_multiselect": false,
-    "generated_code": null,"""
-
-        return f"""=== PRIMARY CONTEXT (MOST IMPORTANT) ===
-
-Current Project Context:
-Device Constants: {json.dumps(context.device_constants, indent=2)}
-Information: {context.information}
-
-USER INPUT (CRITICAL - MUST BE REFERENCED):
-Message: {user_message or "None"}
-MCQ Responses: {mcq_responses or "None"}
-
-{stage_instructions}
-
-TASK: Process the user input, update the context, extract any file data, and provide appropriate response.
-
-Return a JSON object with this EXACT structure:
-{{
-    "updated_context": {{
-        "device_constants": {{
-            // Updated device specifications - integrate file extractions and user input
-        }},
-        "information": "Updated markdown summary - integrate user input and file data concisely"
-    }},
-    {expected_response_fields}
-    "file_extractions": [
-        {{
-            "extracted_devices": {{
-                // Device specs extracted from files
-            }},
-            "extracted_information": "Brief PLC-relevant summary from files",
-            "processing_summary": "One sentence about what was extracted"
-        }}
-    ]
-}}
-
-CRITICAL RULES:
-- User message and MCQ responses are PRIMARY - reference them directly in your response
-- Only extract PLC-relevant information from files (devices, I/O, safety, control logic)
-- Be extremely concise in updated context
-- If no files uploaded, return empty file_extractions array
-- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options{file_content_section}"""
     
     def _build_file_extraction_prompt(self, file_content: str) -> str:
         """Build prompt for extracting PLC-relevant data from files."""
