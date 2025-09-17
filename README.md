@@ -132,10 +132,16 @@ celery -A app.worker worker --loglevel=info
 - `PUT /api/v1/conversations/{id}` - Continue conversation with user message
 - `GET /api/v1/conversations/{id}` - Get conversation state and history
 
+### Conversation-Level Document Management ✨
+- `POST /api/v1/conversations/{id}/documents/upload` - Upload PDF to conversation
+- `GET /api/v1/conversations/{id}/documents` - List conversation documents
+- `GET /api/v1/conversations/{id}/documents/{hash}` - Get specific document
+- `DELETE /api/v1/conversations/{id}/documents/{hash}` - Remove document
+
 ### Simple Chat API
 - `POST /api/v1/ai/chat` - Stateless chat interaction with AI
 
-### Document Management
+### Document Management (Global)
 - `POST /api/v1/documents/upload` - Upload and parse PDF manuals
 - `GET /api/v1/documents/` - List uploaded documents
 - `GET /api/v1/documents/{id}` - Get specific document

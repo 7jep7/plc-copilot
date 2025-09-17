@@ -22,6 +22,92 @@ class PromptTemplate(ABC):
     def get_model_config(self) -> Dict[str, Any]:
         """Get model configuration for this stage."""
         return ModelConfig.CONVERSATION_CONFIG
+    
+    def _build_document_context(self, state: ConversationState, context_type: str = "general") -> str:
+        """Build document context for inclusion in prompts."""
+        if not state.extracted_documents:
+            return ""
+        
+        # Import here to avoid circular imports
+        from app.services.conversation_document_service import DocumentInfo
+        
+        # Convert dict documents back to DocumentInfo objects
+        documents = [DocumentInfo.from_dict(doc_data) for doc_data in state.extracted_documents]
+        
+        if not documents:
+            return ""
+        
+        context_parts = ["\n**📄 DOCUMENT CONTEXT:**"]
+        
+        for doc in documents:
+            doc_summary = [f"- **{doc.filename}** ({doc.document_type})"]
+            
+            # Add device information
+            if doc.device_info:
+                device_parts = []
+                if doc.device_info.get("manufacturer"):
+                    device_parts.append(doc.device_info["manufacturer"])
+                if doc.device_info.get("model"):
+                    device_parts.append(doc.device_info["model"])
+                if device_parts:
+                    doc_summary.append(f"Device: {' '.join(device_parts)}")
+            
+            # Add context-specific information
+            if context_type == "requirements" and doc.plc_analysis:
+                if doc.plc_analysis.get("key_specifications"):
+                    specs = doc.plc_analysis["key_specifications"]
+                    if isinstance(specs, list) and specs:
+                        doc_summary.append(f"Key specs: {', '.join(specs[:3])}")
+                
+                if doc.plc_analysis.get("io_requirements"):
+                    io_reqs = doc.plc_analysis["io_requirements"]
+                    if isinstance(io_reqs, list) and io_reqs:
+                        doc_summary.append(f"I/O requirements: {', '.join(io_reqs[:2])}")
+            
+            elif context_type == "generation" and doc.plc_analysis:
+                if doc.plc_analysis.get("plc_integration_points"):
+                    integration = doc.plc_analysis["plc_integration_points"]
+                    if isinstance(integration, list) and integration:
+                        doc_summary.append(f"Integration points: {', '.join(integration[:3])}")
+                
+                if doc.plc_analysis.get("technical_parameters"):
+                    params = doc.plc_analysis["technical_parameters"]
+                    if isinstance(params, dict):
+                        param_list = [f"{k}: {v}" for k, v in list(params.items())[:2]]
+                        if param_list:
+                            doc_summary.append(f"Parameters: {', '.join(param_list)}")
+            
+            # Add a brief content preview for very relevant documents
+            if len(doc.raw_text) < 3000:  # For shorter, more focused documents
+                content_lines = doc.raw_text.split('\n')[:8]
+                meaningful_lines = [line.strip() for line in content_lines if line.strip() and len(line.strip()) > 15]
+                if meaningful_lines:
+                    doc_summary.append(f"Content preview: {' | '.join(meaningful_lines[:2])}")
+            
+            context_parts.append(" | ".join(doc_summary))
+        
+        context_parts.append("")  # Add spacing
+        return "\n".join(context_parts)
+    
+    def _should_suggest_document_upload(self, state: ConversationState, user_message: str) -> Optional[str]:
+        """Determine if document upload should be suggested based on conversation context."""
+        if state.extracted_documents:
+            return None  # Already have documents
+        
+        user_msg_lower = user_message.lower()
+        
+        # Keywords that suggest documents would be helpful
+        device_keywords = ["camera", "sensor", "motor", "drive", "controller", "plc", "hmi", "valve", "actuator"]
+        spec_keywords = ["specification", "datasheet", "manual", "catalog", "model", "part number"]
+        
+        has_device = any(keyword in user_msg_lower for keyword in device_keywords)
+        has_spec_request = any(keyword in user_msg_lower for keyword in spec_keywords)
+        
+        if has_device or has_spec_request:
+            return ("If you have datasheets, manuals, or technical specifications for your devices, "
+                   "uploading them can help me provide more accurate requirements and code generation.")
+        
+        return None
 
 
 class ProjectKickoffTemplate(PromptTemplate):
@@ -36,6 +122,7 @@ CONTEXT AWARENESS:
 - Always consider previous messages and build upon prior information
 - Reference earlier requirements when asking follow-up questions
 - Avoid asking for information the user has already provided
+- Use uploaded documents to inform your analysis and avoid redundant questions
 
 TECHNICAL FOCUS:
 - Industrial automation processes and control requirements
@@ -78,21 +165,32 @@ RESPONSE FORMAT:
 IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
-        if state.document_ids:
-            doc_count = len(state.document_ids)
-            base_prompt += f"\n\nDOCUMENT CONTEXT:\nYou have access to {doc_count} uploaded document(s) that may contain relevant technical specifications, drawings, or requirements. Reference these documents when they provide relevant context for your questions.\n"
+        document_context = self._build_document_context(state, "requirements")
+        if document_context:
+            base_prompt += document_context
+            base_prompt += "\nReference the uploaded documents when they provide relevant context for your analysis and questions.\n"
 
         # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
             requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
-            base_prompt += f"\n\nCURRENT REQUIREMENTS:\nThe following requirements have been identified so far:\n{requirements_list}\n\nBuild upon these existing requirements and identify any gaps or clarifications needed.\n"
+            base_prompt += f"\n\n**CURRENT REQUIREMENTS:**\nThe following requirements have been identified so far:\n{requirements_list}\n\nBuild upon these existing requirements and identify any gaps or clarifications needed.\n"
 
         return base_prompt
 
     def build_user_prompt(self, message: str, state: ConversationState) -> str:
+        user_prompt_parts = []
+        
         if hasattr(state, 'requirements') and state.requirements and state.requirements.user_query:
-            return f"Initial Request: {state.requirements.user_query}\n\nUser Response: {message}"
-        return f"User Message: {message}"
+            user_prompt_parts.append(f"Initial Request: {state.requirements.user_query}")
+        
+        user_prompt_parts.append(f"User Response: {message}")
+        
+        # Check if we should suggest document upload
+        doc_suggestion = self._should_suggest_document_upload(state, message)
+        if doc_suggestion:
+            user_prompt_parts.append(f"\nDocument Upload Suggestion: {doc_suggestion}")
+        
+        return "\n\n".join(user_prompt_parts)
     
     def get_model_config(self) -> Dict[str, Any]:
         return ModelConfig.CONVERSATION_CONFIG
@@ -112,6 +210,7 @@ STRATEGY:
 - Use MCQ when there are standard industry options
 - Keep questions laser-focused and easy to understand
 - Avoid overwhelming the user with multiple questions
+- Use uploaded documents to avoid asking for information already provided
 
 QUESTION TYPES:
 1. **Single Open Question**: For custom values, descriptions, or specifications
@@ -137,6 +236,7 @@ CRITICAL RULES:
 - Use simple, clear language
 - Prioritize safety requirements, then I/O, then operational details
 - Estimate total questions needed and track progress
+- Reference uploaded documents when they contain relevant answers
 
 RESPONSE FORMAT:
 <chat_message>
@@ -150,14 +250,15 @@ RESPONSE FORMAT:
 IMPORTANT: Use exactly the <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
-        if state.document_ids:
-            doc_count = len(state.document_ids)
-            base_prompt += f"\n\nDOCUMENT CONTEXT:\nYou have {doc_count} uploaded document(s) available. Reference them when relevant to avoid asking questions already answered in the documents.\n"
+        document_context = self._build_document_context(state, "requirements")
+        if document_context:
+            base_prompt += document_context
+            base_prompt += "\nReference the uploaded documents when relevant to avoid asking questions already answered in the documents.\n"
 
         # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
             requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
-            base_prompt += f"\n\nREQUIREMENTS TO CLARIFY:\n{requirements_list}\n\nFocus on technical details needed to implement these requirements.\n"
+            base_prompt += f"\n\n**REQUIREMENTS TO CLARIFY:**\n{requirements_list}\n\nFocus on technical details needed to implement these requirements.\n"
 
         return base_prompt
 
@@ -185,14 +286,15 @@ CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsi
 IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
-        if state.document_ids:
-            doc_count = len(state.document_ids)
-            base_prompt += f"\n\nDOCUMENT CONTEXT:\nUse technical details from the {doc_count} uploaded document(s) for accurate code generation.\n"
+        document_context = self._build_document_context(state, "generation")
+        if document_context:
+            base_prompt += document_context
+            base_prompt += "\nUse technical details from the uploaded documents for accurate code generation, including specific device models, I/O specifications, and timing requirements.\n"
 
         # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
             requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
-            base_prompt += f"\n\nREQUIREMENTS TO IMPLEMENT:\n{requirements_list}\n\nGenerate ST code that fulfills all these requirements.\n"
+            base_prompt += f"\n\n**REQUIREMENTS TO IMPLEMENT:**\n{requirements_list}\n\nGenerate ST code that fulfills all these requirements.\n"
 
         return base_prompt
 
@@ -223,14 +325,19 @@ CRITICAL RESPONSE FORMAT - Follow this exact structure for proper frontend parsi
 IMPORTANT: Use exactly the <code> and <chat_message> tags above. Do not include these tags in your actual content."""
 
         # Add document context if available
-        if state.document_ids:
-            doc_count = len(state.document_ids)
-            base_prompt += f"\n\nDOCUMENT CONTEXT:\nReference the {doc_count} uploaded document(s) for validation and testing requirements.\n"
+        document_context = self._build_document_context(state, "generation")
+        if document_context:
+            base_prompt += document_context
+            base_prompt += "\nReference the uploaded documents for validation and testing requirements, including device-specific parameters and operational constraints.\n"
 
         # Add requirements history if available
         if state.requirements and state.requirements.identified_requirements:
             requirements_list = "\n".join([f"- {req}" for req in state.requirements.identified_requirements])
-            base_prompt += f"\n\nREQUIREMENTS TO VALIDATE:\n{requirements_list}\n\nEnsure all refinements maintain compliance with these requirements.\n"
+            base_prompt += f"\n\n**ORIGINAL REQUIREMENTS:**\n{requirements_list}\n\nEnsure all refinements maintain compliance with the original requirements.\n"
+
+        # Add generation context if available
+        if state.generation and state.generation.generated_code:
+            base_prompt += f"\n\n**CURRENT CODE VERSION:**\nThe user is working with code that implements the requirements above. Apply their feedback to improve the code.\n"
 
         return base_prompt
 
