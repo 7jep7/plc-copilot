@@ -35,13 +35,23 @@ Create the copilot for Programmable Logic Controllers. Automate automating. Prog
 ## Features
 
 ### Core Functionality ✅
-1. **Multi-Stage Conversation System**: Guided 4-stage workflow from requirements to code refinement
-2. **PDF Document Parsing**: Upload industrial device manuals and extract critical information relevant for PLC code
-3. **AI-Powered PLC Code Generation**: Convert user prompts and manual context into structured text (PLC code) using OpenAI models
-4. **Digital Twin Testing**: Simple simulation functionality to test structured text (PLC code) for robustness
+1. **🎯 Context-Centric API**: Unified endpoint for all user interactions with intelligent context management
+2. **📄 Immediate File Processing**: Upload PDFs and instantly extract PLC-relevant device specifications
+3. **🤖 AI-Powered Code Generation**: Convert natural language and context into production-ready Structured Text
+4. **📊 Smart Progress Tracking**: AI calculates requirements completion automatically
+5. **❓ Intelligent MCQ System**: Structured questions for standardized inputs and faster data gathering
 
-### Work in Progress 🚧
-5. **Code Library & Knowledge Base**: Industrial-grade ST code sample library with comprehensive API for uploading, searching, and managing user-contributed code. Includes semantic search capabilities and code similarity matching. Foundation for future RAG (Retrieval-Augmented Generation) integration.
+### New Architecture Benefits ⭐
+- **Single API Endpoint**: All interactions through `POST /api/v1/context/update`
+- **Flexible JSON Context**: Supports complex nested device hierarchies
+- **Lean File Processing**: Selective extraction, no file storage required
+- **AI-Driven Stage Management**: Automatic progress inference with user override capability
+- **Context Compression**: Focuses only on PLC-relevant information
+
+### Legacy Features (Maintained) 🔧
+6. **Multi-Stage Conversation System**: Original 4-stage workflow (deprecated but functional)
+7. **Digital Twin Testing**: Simple simulation functionality for code validation
+8. **Code Library & Knowledge Base**: Industrial-grade ST code samples with search capabilities
 
 ### Technical Features
 - **RESTful API**: Two-tier approach with conversation workflows and simple chat endpoints
@@ -85,9 +95,32 @@ docker-compose up --build
 3. **Access the API**:
 - API: http://localhost:8000
 - Interactive docs: http://localhost:8000/docs
+- **New Context API**: http://localhost:8000/api/v1/context/update
 - Health check: http://localhost:8000/health
-- API Documentation: http://localhost:8000/docs
-- Health Check: http://localhost:8000/health
+
+### Quick Test with Context API
+
+```bash
+# Test the new unified endpoint
+curl -X POST "http://localhost:8000/api/v1/context/update" \
+  -F "message=I need to automate a conveyor belt system" \
+  -F "current_context={\"device_constants\":{},\"information\":\"\"}" \
+  -F "current_stage=gathering_requirements"
+```
+
+Example response:
+```json
+{
+  "updated_context": {
+    "device_constants": {},
+    "information": "## Project: Conveyor Belt Automation\n- Basic conveyor control system required"
+  },
+  "chat_message": "Great! I'll help you design a conveyor belt control system. What type of items will the conveyor be handling?",
+  "gathering_requirements_progress": 0.1,
+  "current_stage": "gathering_requirements",
+  "is_mcq": false,
+  "mcq_options": []
+}
 
 ### Manual Local Setup
 
@@ -127,12 +160,29 @@ celery -A app.worker worker --loglevel=info
 
 ## API Reference
 
-### Core Conversation API
+### 🎯 **NEW: Context-Centric API** ⭐
+**Single endpoint for all interactions - Recommended for all new integrations**
+
+#### Main Context Endpoint
+- `POST /api/v1/context/update` - **Unified endpoint for all user interactions**
+  - Handle user messages, MCQ responses, and file uploads in one request
+  - AI-driven progress calculation and stage management
+  - Immediate file processing with selective PLC-relevant extraction
+  - Returns updated context, chat responses, MCQs, and generated code
+
+#### Stage Management
+- `POST /api/v1/context/transition` - Manual stage transitions (optional)
+- `GET /api/v1/context/health` - Health check for context API
+
+### Legacy Endpoints (Deprecated)
+*The following endpoints will be removed in future versions. Use the Context API above.*
+
+### Core Conversation API (Legacy)
 - `POST /api/v1/conversations/` - Start new conversation (4-stage workflow)
 - `PUT /api/v1/conversations/{id}` - Continue conversation with user message
 - `GET /api/v1/conversations/{id}` - Get conversation state and history
 
-### Conversation-Level Document Management ✨
+### Conversation-Level Document Management (Legacy)
 - `POST /api/v1/conversations/{id}/documents/upload` - Upload PDF to conversation
 - `GET /api/v1/conversations/{id}/documents` - List conversation documents
 - `GET /api/v1/conversations/{id}/documents/{hash}` - Get specific document
@@ -181,7 +231,256 @@ celery -A app.worker worker --loglevel=info
 
 ## User Workflow
 
-The PLC Copilot follows a structured 4-stage conversation flow designed for efficiency and smooth user experience. Most time is spent in stages 2 and 4, while stages 1 and 3 are kept short to maintain momentum.
+The PLC Copilot now features a **unified context-centric approach** that simplifies frontend integration while providing powerful AI-driven automation project development.
+
+## 🎯 New Context-Centric Workflow
+
+### Single API Approach ⭐
+**All user interactions now go through one powerful endpoint: `POST /api/v1/context/update`**
+
+### Project Context Structure
+The system maintains a unified context with two main components:
+
+```json
+{
+  "device_constants": {
+    "ConveyorSystem": {
+      "Motor": {
+        "Type": "AC Servo",
+        "Power": "2.5kW",
+        "Sensors": {
+          "PositionEncoder": {"Resolution": "1024 PPR"},
+          "ProximitySensor": {"Type": "Inductive", "Range": "8mm"}
+        }
+      }
+    },
+    "SafetySystem": {
+      "EmergencyStops": {"Count": 3, "Type": "Category 3"},
+      "LightCurtains": {"Height": "1800mm", "Resolution": "30mm"}
+    }
+  },
+  "information": "Brief markdown summary of project requirements and decisions..."
+}
+```
+
+### Three-Stage Workflow
+1. **Gathering Requirements** - AI asks focused questions and processes uploaded files
+2. **Code Generation** - Generates complete Structured Text based on gathered context
+3. **Refinement & Testing** - Iterative improvement through conversation and manual editing
+
+### Stage Management
+- **AI-Inferred Progress**: System calculates completion automatically (0.0-1.0 in requirements gathering)
+- **User-Controlled Transitions**: Frontend can force stage transitions anytime
+- **No Backward Navigation**: Cannot return to requirements gathering (forward-only workflow)
+
+### File Processing
+- **Immediate Processing**: Files processed instantly, no storage required
+- **Selective Extraction**: AI extracts only PLC-relevant specifications
+- **Context Integration**: Device specs and information automatically merged
+- **Lean Approach**: Focuses on essential data to avoid context bloat
+
+## Context API Usage
+
+### Request Format
+```http
+POST /api/v1/context/update
+Content-Type: multipart/form-data
+
+message: "I need optical sensors for detection"
+mcq_responses: ["Emergency stop buttons only", "Light curtains"]  // JSON array
+current_context: {
+  "device_constants": {...},
+  "information": "project requirements..."
+}
+current_stage: "gathering_requirements"
+files: [file1.pdf, file2.pdf]  // Optional file uploads
+```
+
+### Response Format
+```json
+{
+  "updated_context": {
+    "device_constants": {...},  // Updated with new information
+    "information": "updated markdown summary"
+  },
+  "chat_message": "What's the operating voltage for your motors?",
+  "gathering_requirements_progress": 0.7,  // Only in gathering_requirements stage
+  "current_stage": "gathering_requirements",
+  "is_mcq": true,
+  "is_multiselect": false,
+  "mcq_question": "What voltage do your motors require?",
+  "mcq_options": ["24V DC", "230V AC", "400V AC", "Other"],
+  "generated_code": null  // Only present when current_stage = "code_generation"
+}
+```
+
+### Frontend Integration Examples
+
+#### React/TypeScript Implementation
+```typescript
+interface ProjectContext {
+  device_constants: Record<string, any>;
+  information: string;
+}
+
+interface ContextResponse {
+  updated_context: ProjectContext;
+  chat_message: string;
+  gathering_requirements_progress?: number;
+  current_stage: 'gathering_requirements' | 'code_generation' | 'refinement_testing';
+  is_mcq: boolean;
+  is_multiselect: boolean;
+  mcq_question?: string;
+  mcq_options: string[];
+  generated_code?: string;
+}
+
+async function updateContext(
+  message?: string,
+  mcqResponses?: string[],
+  context: ProjectContext,
+  stage: string,
+  files?: File[]
+): Promise<ContextResponse> {
+  const formData = new FormData();
+  
+  if (message) formData.append('message', message);
+  if (mcqResponses?.length) formData.append('mcq_responses', JSON.stringify(mcqResponses));
+  formData.append('current_context', JSON.stringify(context));
+  formData.append('current_stage', stage);
+  
+  if (files) {
+    files.forEach(file => formData.append('files', file));
+  }
+  
+  const response = await fetch('/api/v1/context/update', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return response.json();
+}
+
+// Usage examples
+const result = await updateContext(
+  "I need to automate a conveyor belt system",
+  undefined,
+  { device_constants: {}, information: "" },
+  "gathering_requirements"
+);
+
+// Handle MCQ response
+const mcqResult = await updateContext(
+  undefined,
+  ["Emergency stop buttons only", "Light curtains"],
+  currentContext,
+  "gathering_requirements"
+);
+
+// File upload with message
+const fileResult = await updateContext(
+  "Here's the motor datasheet",
+  undefined,
+  currentContext,
+  "gathering_requirements",
+  [motorDatasheet.pdf]
+);
+
+// Force code generation
+const codeResult = await updateContext(
+  undefined,
+  undefined,
+  currentContext,
+  "code_generation"  // AI will generate Structured Text
+);
+```
+
+#### Vue.js Implementation
+```javascript
+export default {
+  data() {
+    return {
+      context: { device_constants: {}, information: "" },
+      currentStage: "gathering_requirements",
+      chatMessage: "",
+      isMcq: false,
+      mcqOptions: [],
+      progress: 0
+    };
+  },
+  methods: {
+    async sendMessage(message, files = null) {
+      try {
+        const formData = new FormData();
+        formData.append('message', message);
+        formData.append('current_context', JSON.stringify(this.context));
+        formData.append('current_stage', this.currentStage);
+        
+        if (files) {
+          Array.from(files).forEach(file => formData.append('files', file));
+        }
+        
+        const response = await fetch('/api/v1/context/update', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        // Update component state
+        this.context = result.updated_context;
+        this.currentStage = result.current_stage;
+        this.chatMessage = result.chat_message;
+        this.isMcq = result.is_mcq;
+        this.mcqOptions = result.mcq_options || [];
+        this.progress = result.gathering_requirements_progress || 0;
+        
+        if (result.generated_code) {
+          this.showGeneratedCode(result.generated_code);
+        }
+        
+      } catch (error) {
+        console.error('Context update failed:', error);
+      }
+    }
+  }
+};
+```
+
+### Key Benefits of Context API
+
+1. **Simplified Integration**: Single endpoint handles all interactions
+2. **Intelligent File Processing**: Immediate extraction of PLC-relevant data
+3. **AI-Driven Progress**: Automatic calculation of requirements completeness
+4. **Flexible JSON Structure**: Supports complex nested device hierarchies
+5. **Lean Context Management**: Focuses on essential information only
+6. **Stage-Aware Responses**: Specialized AI behavior for each workflow stage
+7. **MCQ Support**: Structured questions for standardized inputs
+
+### Migration from Legacy APIs
+
+If you're using the old conversation endpoints, migration is straightforward:
+
+**Old Approach:**
+```typescript
+// Multiple endpoints and complex state management
+POST /api/v1/conversations/ 
+POST /api/v1/conversations/{id}/documents/upload
+POST /api/v1/conversations/{id}/stage
+GET /api/v1/conversations/{id}
+```
+
+**New Approach:**
+```typescript
+// Single endpoint for everything
+POST /api/v1/context/update
+```
+
+The new Context API provides all the functionality of the legacy system with significantly simpler integration and more powerful AI capabilities.
+
+## Legacy User Workflow (Deprecated)
+
+*The following section describes the old 4-stage conversation system. Use the Context API above for new implementations.*
 
 ### Stage 1: Project Kickoff 🚀
 **Purpose**: Capture the user's initial automation idea or problem statement.

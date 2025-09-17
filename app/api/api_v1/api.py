@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import documents, plc_code, digital_twin, ai, conversations, code_library
+from app.api.api_v1.endpoints import documents, plc_code, digital_twin, ai, conversations, code_library, context
 
 api_router = APIRouter()
 
@@ -30,7 +30,14 @@ api_router.include_router(
     tags=["ai"]
 )
 
-# Conversation endpoints
+# Context API - New unified endpoint
+api_router.include_router(
+    context.router,
+    prefix="/context",
+    tags=["context"]
+)
+
+# Conversation endpoints (Legacy - will be deprecated)
 api_router.include_router(
     conversations.router,
     prefix="/conversations",
