@@ -48,22 +48,41 @@ async def run_live_flow(request: ContextUpdateRequest, uploaded_files=None):
 
 def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
     """Build and show prompts that would be sent to the LLM without calling it."""
+    from app.services.prompt_templates import PromptTemplates
+    from app.services.context_service import ContextProcessingService
+    
     svc = ContextProcessingService()
-    # Build the context update prompt
-    prompt = svc._build_context_update_prompt(request.current_context, request.message, request.mcq_responses)
-    print("\n[Backend -> LLM] Prompt that would be sent to the LLM (context update):\n")
+    
+    # Extract file texts if files are provided
+    extracted_file_texts = []
+    if uploaded_files:
+        for file_content in uploaded_files:
+            # Simulate file text extraction
+            text = svc._extract_text_from_bytes(file_content.read())
+            extracted_file_texts.append(text[:1000] + "...[truncated]" if len(text) > 1000 else text)
+    
+    # Choose appropriate template and build prompt
+    if extracted_file_texts:
+        # Template B: For messages with files
+        prompt = PromptTemplates.build_template_b_prompt(
+            context=request.current_context,
+            stage=request.current_stage,
+            user_message=request.message,
+            mcq_responses=request.mcq_responses,
+            extracted_file_texts=extracted_file_texts
+        )
+        print("\n[Backend -> LLM] Template B prompt (with files):\n")
+    else:
+        # Template A: For messages without files
+        prompt = PromptTemplates.build_template_a_prompt(
+            context=request.current_context,
+            stage=request.current_stage,
+            user_message=request.message,
+            mcq_responses=request.mcq_responses
+        )
+        print("\n[Backend -> LLM] Template A prompt (no files):\n")
+    
     print(prompt)
-
-    # If stage is code generation, show code-generation prompt
-    if request.current_stage == Stage.CODE_GENERATION:
-        code_prompt = svc._build_code_generation_prompt(request.current_context)
-        print("\n[Backend -> LLM] Code generation prompt (system/user):\n")
-        print(code_prompt)
-
-    if request.current_stage == Stage.REFINEMENT_TESTING:
-        refinement_prompt = svc._build_refinement_prompt(request.current_context, request.message)
-        print("\n[Backend -> LLM] Refinement prompt:\n")
-        print(refinement_prompt)
 
     # Simulate a canned backend response
     print("\n[Backend -> Frontend] Simulated API response (no LLM call):\n")
@@ -76,7 +95,8 @@ def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
         "is_multiselect": False,
         "mcq_question": None,
         "mcq_options": [],
-        "generated_code": None
+        "generated_code": None,
+        "file_extractions": [{"extracted_devices": {}, "extracted_information": "Simulated file extraction", "processing_summary": "Dry run - no actual file processing"}] if uploaded_files else []
     }
     # If an uploaded file was provided, simulate a file_extractions entry
     if uploaded_files:
