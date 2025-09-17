@@ -38,19 +38,45 @@ class PromptTemplates:
             else:  # It's legacy plain dict
                 device_constants_dict[device_name] = device_info
         
+        # Check if context is empty (no device constants and no information)
+        context_is_empty = not device_constants_dict and not context.information.strip()
+        
+        # Build user input section
+        user_input_section = f"USER INPUT (PRIMARY FOCUS):\nMessage: {user_message or 'No message provided'}"
+        if mcq_responses:
+            user_input_section += f"\nMCQ Responses: {mcq_responses}"
+        
+        # Build special handling section (only if context is empty)
+        special_handling_section = ""
+        if context_is_empty:
+            special_handling_section = """
+SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
+If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
+        
+        # Build critical rules (conditional based on context and inputs)
+        critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
+        if context_is_empty:
+            critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        critical_rules.extend([
+            "- Be GENEROUS with information storage - capture all potentially useful details from user input",
+            "- Information should NOT duplicate device constants (those go in device_constants section)",
+            "- Reference their input directly in your response",
+            "- For each device in device_constants, specify origin as \"user message\" since no files are involved",
+            "- Be conversational and responsive to their specific needs",
+            "- No file processing needed - file_extractions always empty array"
+        ])
+        
         return f"""=== DIRECT USER INTERACTION ===
 
 Current Project Context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-USER INPUT (PRIMARY FOCUS):
-Message: {user_message or "No message provided"}
-MCQ Responses: {mcq_responses or "No MCQ responses"}
+{user_input_section}
 
 {stage_instructions}
 
-TASK: Process the user input directly, update the context based on their message and MCQ responses, and provide appropriate response.
+TASK: Process the user input directly, update the context based on their message{" and MCQ responses" if mcq_responses else ""}, and provide appropriate response.{special_handling_section}
 
 Return a JSON object with this EXACT structure:
 {{
@@ -63,19 +89,14 @@ Return a JSON object with this EXACT structure:
                 "origin": "user message"  // Options: "file", "user message", "internet", "internal knowledge base", "other"
             }}
         }},
-        "information": "Updated markdown summary - integrate user message and MCQ responses"
+        "information": "Updated markdown summary - be GENEROUS with information storage. Include ALL relevant details from user input that could be useful throughout the automation project. Store requirements, preferences, constraints, goals, operational details, environmental factors, etc. Do NOT duplicate device constants here."
     }},
     {expected_response_fields}
     "file_extractions": []
 }}
 
 CRITICAL RULES:
-- Focus entirely on user message and MCQ responses
-- Reference their input directly in your response
-- Update context based on their requirements and decisions
-- For each device in device_constants, specify origin as "user message" since no files are involved
-- Be conversational and responsive to their specific needs
-- No file processing needed - file_extractions always empty array"""
+{chr(10).join(critical_rules)}"""
     
     @staticmethod
     def build_template_b_prompt(
@@ -122,19 +143,47 @@ Uploaded file content:
             else:  # It's legacy plain dict
                 device_constants_dict[device_name] = device_info
         
+        # Check if context is empty (no device constants and no information)
+        context_is_empty = not device_constants_dict and not context.information.strip()
+        
+        # Build user input section
+        user_input_section = f"USER INPUT (CRITICAL - MUST BE REFERENCED):\nMessage: {user_message or 'None'}"
+        if mcq_responses:
+            user_input_section += f"\nMCQ Responses: {mcq_responses}"
+        
+        # Build special handling section (only if context is empty)
+        special_handling_section = ""
+        if context_is_empty:
+            special_handling_section = """
+SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
+If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
+        
+        # Build critical rules (conditional based on context and inputs)
+        critical_rules = []
+        if context_is_empty:
+            critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        critical_rules.extend([
+            "- Be GENEROUS with information storage - capture all potentially useful details from user input and file data",
+            "- Information should NOT duplicate device constants (those go in device_constants section)",
+            f"- User message{' and MCQ responses' if mcq_responses else ''} are PRIMARY - reference them directly in your response",
+            "- Only extract PLC-relevant information from files (devices, I/O, safety, control logic)",
+            "- Set origin=\"user message\" for devices from user input, origin=\"file\" for devices from uploaded files",
+            "- If no files uploaded, return empty file_extractions array"
+        ])
+        if mcq_responses:
+            critical_rules.append("- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options")
+        
         return f"""=== PRIMARY CONTEXT (MOST IMPORTANT) ===
 
 Current Project Context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-USER INPUT (CRITICAL - MUST BE REFERENCED):
-Message: {user_message or "None"}
-MCQ Responses: {mcq_responses or "None"}
+{user_input_section}
 
 {stage_instructions}
 
-TASK: Process the user input, update the context, extract any file data, and provide appropriate response.
+TASK: Process the user input, update the context, extract any file data, and provide appropriate response.{special_handling_section}
 
 Return a JSON object with this EXACT structure:
 {{
@@ -147,7 +196,7 @@ Return a JSON object with this EXACT structure:
                 "origin": "user message"  // For user input devices, or "file" for file-extracted devices
             }}
         }},
-        "information": "Updated markdown summary - integrate user input and file data concisely"
+        "information": "Updated markdown summary - be GENEROUS with information storage. Include ALL relevant details from user input and file data that could be useful throughout the automation project. Store requirements, preferences, constraints, goals, operational details, environmental factors, etc. Do NOT duplicate device constants here."
     }},
     {expected_response_fields}
     "file_extractions": [
@@ -167,12 +216,7 @@ Return a JSON object with this EXACT structure:
 }}
 
 CRITICAL RULES:
-- User message and MCQ responses are PRIMARY - reference them directly in your response
-- Only extract PLC-relevant information from files (devices, I/O, safety, control logic)
-- Be extremely concise in updated context
-- Set origin="user message" for devices from user input, origin="file" for devices from uploaded files
-- If no files uploaded, return empty file_extractions array
-- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options{file_content_section}"""
+{chr(10).join(critical_rules)}{file_content_section}"""
     
     @staticmethod
     def _get_stage_instructions(stage: Stage, progress: float = 0.0) -> tuple[str, str]:
