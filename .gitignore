@@ -139,8 +139,10 @@ dmypy.json
 Thumbs.db
 
 # Project specific
-uploads/
-user_uploads/
+uploads/*
+!uploads/README.md
+user_uploads/*
+!user_uploads/README.md
 logs/
 *.db
 *.log
