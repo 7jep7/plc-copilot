@@ -121,7 +121,16 @@ class ContextProcessingService:
         # Parse comprehensive response
         try:
             logger.debug(f"Raw AI response: {response}")
-            ai_response = json.loads(response)
+            
+            # Strip markdown code blocks if present
+            response_content = response.strip()
+            if response_content.startswith("```json"):
+                response_content = response_content[7:]  # Remove ```json
+            if response_content.endswith("```"):
+                response_content = response_content[:-3]  # Remove ```
+            response_content = response_content.strip()
+            
+            ai_response = json.loads(response_content)
             
             # Extract updated context
             updated_context_data = ai_response.get("updated_context", {})
@@ -159,6 +168,7 @@ class ContextProcessingService:
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse comprehensive AI response: {e}")
+            logger.error(f"Raw response (first 1000 chars): {response[:1000]}")
             # Fallback response
             return ContextUpdateResponse(
                 updated_context=request.current_context,
@@ -396,6 +406,8 @@ Generate complete, production-ready Structured Text (ST) code including:
 - Error handling and clear comments
 
 Structure: TYPE declarations → PROGRAM → VAR sections → Main logic → Safety/error handling
+
+CRITICAL: The Structured Text code must be properly escaped as a JSON string value.
 """
             expected_response_fields = """
     "chat_message": "I've generated the Structured Text code based on your requirements. You can now review and refine it.",
@@ -403,7 +415,7 @@ Structure: TYPE declarations → PROGRAM → VAR sections → Main logic → Saf
     "mcq_question": null,
     "mcq_options": [],
     "is_multiselect": false,
-    "generated_code": "... complete ST code here ...","""
+    "generated_code": "PROGRAM Main\\nVAR\\n  // Variable declarations\\nEND_VAR\\n\\n// Main logic\\n\\nEND_PROGRAM","""
             
         elif stage == Stage.REFINEMENT_TESTING:
             stage_instructions = """
