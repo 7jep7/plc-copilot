@@ -140,5 +140,12 @@ Thumbs.db
 
 # Project specific
 uploads/
+user_uploads/
 logs/
 *.db
+*.log
+
+# Test fixtures - exclude large sample PDFs but keep directory structure
+tests/fixtures/sample_documents/**/*.pdf
+tests/fixtures/sample_documents/**/*.docx
+tests/fixtures/sample_documents/**/*.xlsx

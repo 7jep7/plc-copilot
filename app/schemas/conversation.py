@@ -85,7 +85,16 @@ class ConversationState(BaseModel):
     
     # Global context
     project_context: Optional[Dict[str, Any]] = None
-    document_ids: List[str] = Field(default_factory=list)
+    document_ids: List[str] = Field(default_factory=list)  # Legacy field for backward compatibility
+    
+    # Document context (new stateless approach)
+    extracted_documents: List[Dict[str, Any]] = Field(default_factory=list)  # Parsed document data
+
+
+class DocumentUploadRequest(BaseModel):
+    """Request to upload a document to a conversation."""
+    analyze_with_openai: bool = True
+    description: Optional[str] = None
 
 
 class StageTransitionRequest(BaseModel):

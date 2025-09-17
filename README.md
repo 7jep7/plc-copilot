@@ -57,6 +57,8 @@ Create the copilot for Programmable Logic Controllers. Automate automating. Prog
 
 **MVP Cost Optimization**: The system includes intelligent OpenAI model cascade fallback to manage costs while using free hackathon credits. Models are tried in order of cost-effectiveness: `gpt-4o-mini` → `gpt-3.5-turbo` → `gpt-4o`. The system includes session-based memory and daily reset logic, with email notifications when rate limits are reached (once per session). This temporary solution avoids upgrading to OpenAI Tier 1 until natural usage reaches the $5 threshold.
 
+**Tier 0 Limits**: Before spending $5 (Tier 0), you are restricted to **200 requests per day per model**. The backend tracks usage and enforces these limits automatically. Once you reach the $5 spend threshold, higher limits apply.
+
 ## Quick Start
 
 ### Prerequisites
@@ -130,10 +132,16 @@ celery -A app.worker worker --loglevel=info
 - `PUT /api/v1/conversations/{id}` - Continue conversation with user message
 - `GET /api/v1/conversations/{id}` - Get conversation state and history
 
+### Conversation-Level Document Management ✨
+- `POST /api/v1/conversations/{id}/documents/upload` - Upload PDF to conversation
+- `GET /api/v1/conversations/{id}/documents` - List conversation documents
+- `GET /api/v1/conversations/{id}/documents/{hash}` - Get specific document
+- `DELETE /api/v1/conversations/{id}/documents/{hash}` - Remove document
+
 ### Simple Chat API
 - `POST /api/v1/ai/chat` - Stateless chat interaction with AI
 
-### Document Management
+### Document Management (Global)
 - `POST /api/v1/documents/upload` - Upload and parse PDF manuals
 - `GET /api/v1/documents/` - List uploaded documents
 - `GET /api/v1/documents/{id}` - Get specific document
@@ -403,6 +411,7 @@ plc-copilot/
 │   ├── core/                   # Core configuration and utilities
 │   │   ├── config.py          # Settings and configuration
 │   │   ├── database.py        # Database connection and session
+│   │   ├── models.py          # Model configuration and fallback cascade
 │   │   └── logging.py         # Structured logging setup
 │   ├── api/                   # API endpoints
 │   │   └── api_v1/           # API version 1
@@ -411,16 +420,46 @@ plc-copilot/
 │   ├── models/               # SQLAlchemy database models
 │   │   ├── document.py       # Document/manual models
 │   │   ├── plc_code.py      # PLC code models
+│   │   ├── conversation.py   # Conversation models
 │   │   └── digital_twin.py  # Simulation models
 │   ├── schemas/              # Pydantic request/response schemas
 │   ├── services/             # Business logic services
-│   │   ├── openai_service.py      # OpenAI API integration
-│   │   ├── document_service.py    # Document processing
-│   │   ├── plc_service.py         # PLC code management
-│   │   └── digital_twin_service.py # Simulation logic
+│   │   ├── openai_service.py           # OpenAI API integration
+│   │   ├── document_service.py         # Document processing
+│   │   ├── conversation_orchestrator.py # Multi-stage conversations
+│   │   ├── notification_service.py     # Email notifications
+│   │   ├── plc_service.py              # PLC code management
+│   │   └── digital_twin_service.py     # Simulation logic
 │   └── worker.py             # Celery worker configuration
-├── alembic/                  # Database migrations
+├── docs/                     # Documentation
+│   ├── api/                  # API documentation
+│   │   ├── API_READY_FOR_FRONTEND.md
+│   │   ├── FRONTEND_INTEGRATION_GUIDE.md
+│   │   └── FINAL_API_STATUS_REPORT.md
+│   ├── deployment/           # Deployment guides
+│   │   └── DEPLOYMENT.md
+│   ├── conversation_system.md # Conversation system architecture
+│   └── COST_OPTIMIZATION.md  # Cost optimization strategies
+├── tests/                    # Test suite
+│   ├── unit/                 # Unit tests
+│   ├── integration/          # Integration tests
+│   └── fixtures/             # Test fixtures and sample data
+│       └── sample_documents/ # Sample PDFs for document parser testing
 ├── scripts/                  # Utility scripts
+│   ├── dev_server.py         # Development server
+│   ├── init_db.py           # Database initialization
+│   └── demo_*.py            # Demo scripts
+├── st_code_library/         # Industrial ST code samples
+├── alembic/                 # Database migrations
+├── requirements.txt         # Python dependencies
+├── render.yaml             # Render.com deployment config
+├── docker-compose.yml      # Local Docker development
+├── Dockerfile              # Container configuration
+└── README.md              # This file
+```
+├── st_code_library/          # ST code samples
+├── user_uploads/             # User-uploaded files
+├── alembic/                  # Database migrations
 ├── requirements.txt          # Python dependencies
 ├── render.yaml              # Render.com deployment config
 ├── docker-compose.yml       # Local Docker development
@@ -573,28 +612,43 @@ POST /api/v1/library/upload
 For frequent testing without high OpenAI costs:
 ```bash
 # Use efficient test suite (80% cost reduction)
-TESTING=true python scripts/test_4_stage_system_efficient.py
+TESTING=true python tests/integration/test_4_stage_system_efficient.py
 
 # Test MCQ functionality
-TESTING=true python scripts/test_mcq.py
+TESTING=true python tests/integration/test_mcq.py
+
+# Test model cascade and fallback
+python tests/integration/test_model_cascade.py
 ```
 
 #### Comprehensive Testing
 For full coverage (higher cost):
 ```bash
 # Full test suite
-python scripts/test_4_stage_system.py
+python tests/integration/test_4_stage_system.py
 
 # Test all endpoints
-python scripts/test_all_endpoints.py
+python tests/integration/test_all_endpoints.py
+
+# Test document processing
+python tests/integration/test_document_processing.py /path/to/sample.pdf
+```
+
+#### Unit Testing
+```bash
+# Run unit tests
+pytest tests/unit/
+
+# Run specific test
+python tests/unit/test_ai_chat.py
 ```
 
 Run the Code Library API test suite:
 ```bash
-python scripts/test_code_library_api.py
+python tests/integration/test_code_library_api.py
 ```
 
-> 💡 **Cost Tip**: Set `TESTING=true` to use gpt-4o-mini with reduced token limits. See [COST_OPTIMIZATION.md](COST_OPTIMIZATION.md) for details.
+> 💡 **Cost Tip**: Set `TESTING=true` to use gpt-4o-mini with reduced token limits. See [docs/COST_OPTIMIZATION.md](docs/COST_OPTIMIZATION.md) for details.
 
 ## Development
 
