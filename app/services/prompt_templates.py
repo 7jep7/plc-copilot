@@ -107,15 +107,28 @@ SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
 If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
         
         # Build critical rules (conditional based on context and inputs)
-        critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
-        if context_is_empty and not mcq_responses:
-            critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
-        elif context_is_empty and mcq_responses:
-            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
-            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
-            if any(resp in initial_mcq_options for resp in mcq_responses):
-                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
-                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
+        if mcq_responses:
+            # MCQ responses present - prioritize them over user message
+            critical_rules = [
+                "- MCQ responses are the PRIMARY input - the user has made specific selections",
+                "- User message (if any) is secondary - may be just 'ok', '.', 'these', or similar acknowledgment",
+                "- IMMEDIATELY process MCQ responses and store them in context information",
+                "- DO NOT repeat the same question - acknowledge the selection and move to the NEXT requirement area", 
+                "- Move the conversation forward by asking about a DIFFERENT topic or requirement area"
+            ]
+            if context_is_empty:
+                # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+                initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+                if any(resp in initial_mcq_options for resp in mcq_responses):
+                    critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                    critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
+        else:
+            # No MCQ responses - focus on user message
+            critical_rules = ["- Focus entirely on user message"]
+            if context_is_empty:
+                critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        
+        # Add common rules for all scenarios
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -220,15 +233,29 @@ Uploaded file content:
 SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
 If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
         
-        critical_rules = []
-        if context_is_empty and not extracted_file_texts:
-            critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
-        elif context_is_empty and mcq_responses and not extracted_file_texts:
-            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
-            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
-            if any(resp in initial_mcq_options for resp in mcq_responses):
-                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
-                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
+        # Build critical rules based on MCQ responses
+        if mcq_responses:
+            # MCQ responses present - prioritize them over user message  
+            critical_rules = [
+                "- MCQ responses are the PRIMARY input - the user has made specific selections",
+                "- User message (if any) is secondary - may be just 'ok', '.', 'these', or similar acknowledgment", 
+                "- IMMEDIATELY process MCQ responses and store them in context information",
+                "- DO NOT repeat the same question - acknowledge the selection and move to the NEXT requirement area",
+                "- Move the conversation forward by asking about a DIFFERENT topic or requirement area"
+            ]
+            if context_is_empty and not extracted_file_texts:
+                # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+                initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+                if any(resp in initial_mcq_options for resp in mcq_responses):
+                    critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                    critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
+        else:
+            # No MCQ responses - focus on user message and files
+            critical_rules = []
+            if context_is_empty and not extracted_file_texts:
+                critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        
+        # Add common rules for all scenarios
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
