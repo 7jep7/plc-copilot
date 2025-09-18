@@ -230,16 +230,24 @@ class ContextProcessingService:
                 logger.warning(f"JSON parse failed, retrying with corrective prompt. Error: {e}")
                 
                 # Build corrective prompt asking for proper JSON format
-                corrective_prompt = f"""The previous response was not valid JSON. Please provide a response in the exact JSON format required.
+                corrective_prompt = f"""The previous response was not valid JSON. 
 
-Original user request context:
-Stage: {request.current_stage}
-Message: {request.message or 'None'}
-MCQ Responses: {request.mcq_responses or []}
+Context: Stage {request.current_stage}, Message: "{request.message or 'None'}", MCQ: {request.mcq_responses or []}
 
-CRITICAL: Return ONLY valid JSON in the exact format specified in the original prompt. No additional text, no markdown formatting, just pure JSON.
+CRITICAL: Return ONLY valid JSON (no markdown blocks, no comments, no extra text):
+{{
+    "updated_context": {{"device_constants": {{}}, "information": ""}},
+    "chat_message": "response text",
+    "is_mcq": false,
+    "mcq_question": null,
+    "mcq_options": [],
+    "is_multiselect": false,
+    "generated_code": null,
+    "gathering_requirements_estimated_progress": 0.5,
+    "file_extractions": []
+}}
 
-Response must include: updated_context, chat_message, and all other required fields for stage {request.current_stage}."""
+Include all required fields for stage {request.current_stage}. Response must be parseable by JSON.parse()."""
 
                 # Retry the LLM call with corrective prompt
                 retry_call = self.openai_service.chat_completion(
@@ -274,16 +282,40 @@ Response must include: updated_context, chat_message, and all other required fie
 
                 try:
                     ai_response = json.loads(retry_content)
+                    if not isinstance(ai_response, dict):
+                        raise json.JSONDecodeError(f"Retry response is not a JSON object: {type(ai_response)}", retry_content, 0)
                     logger.info("Corrective prompt succeeded, parsed JSON response")
                 except json.JSONDecodeError as retry_error:
                     logger.error(f"Corrective prompt also failed: {retry_error}")
-                    # Fall back to error response instead of bad stage transition
-                    raise ValueError(f"LLM failed to return valid JSON after retry. Original error: {e}, Retry error: {retry_error}")
+                    # Fall back to safe error response instead of crashing
+                    logger.warning("Falling back to safe error response due to persistent JSON parse failures")
+                    return ContextUpdateResponse(
+                        updated_context=request.current_context,
+                        chat_message="I encountered an error processing your request. Please try rephrasing or uploading the file again.",
+                        gathering_requirements_estimated_progress=None,
+                        current_stage=request.current_stage,
+                        is_mcq=False,
+                        is_multiselect=False,
+                        mcq_question=None,
+                        mcq_options=[],
+                        file_extractions=[]
+                    )
             
             # Ensure ai_response is a dictionary before proceeding
             if not isinstance(ai_response, dict):
                 logger.error(f"ai_response is not a dictionary: {type(ai_response)} - {ai_response}")
-                raise ValueError(f"LLM response is not a valid JSON object: {type(ai_response)}")
+                # Fall back to safe error response instead of crashing
+                return ContextUpdateResponse(
+                    updated_context=request.current_context,
+                    chat_message="I encountered an error processing your request. Please try rephrasing or uploading the file again.",
+                    gathering_requirements_estimated_progress=None,
+                    current_stage=request.current_stage,
+                    is_mcq=False,
+                    is_multiselect=False,
+                    mcq_question=None,
+                    mcq_options=[],
+                    file_extractions=[]
+                )
             
             # Extract updated context
             updated_context_data = ai_response.get("updated_context", {})
@@ -376,13 +408,13 @@ Response must include: updated_context, chat_message, and all other required fie
                 file_extractions=file_extractions
             )
             
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
             logger.error(f"Failed to parse comprehensive AI response: {e}")
-            logger.error(f"Raw response (first 1000 chars): {response[:1000]}")
-            # Fallback response
+            logger.error(f"Raw response (first 1000 chars): {response[:1000] if isinstance(response, str) else str(response)[:1000]}")
+            # Fallback response - ensure graceful handling
             return ContextUpdateResponse(
                 updated_context=request.current_context,
-                chat_message="I encountered an error processing your request. Please try again.",
+                chat_message="I encountered an error processing your request. Please try again or rephrase your message.",
                 gathering_requirements_estimated_progress=None,
                 current_stage=request.current_stage,
                 is_mcq=False,
@@ -557,33 +589,21 @@ Response must include: updated_context, chat_message, and all other required fie
         if len(file_content) > max_content:
             file_content = file_content[:max_content] + "...[truncated]"
 
-        return f"""
-Extract PLC-relevant device specifications and information from this document.
+        return f"""Extract PLC-relevant data from this document. Be selective - only automation/control content.
 
-CRITICAL: Be extremely selective and concise. Only extract information directly relevant to PLC programming.
+Document: {file_content}
 
-Document content:
-{file_content}
-
-Return a JSON object with this exact structure:
+RESPONSE: Return ONLY valid JSON (no markdown, no extra text):
 {{
     "devices": {{
         "DeviceName": {{
             "Type": "device type",
-            "Model": "model number", 
-            "Specifications": {{
-                "key": "value"
-            }}
+            "Model": "model number",
+            "Specifications": {{"key": "value"}}
         }}
     }},
-    "information": "Brief markdown summary of PLC-relevant requirements and specifications",
-    "summary": "One sentence describing what was extracted"
+    "information": "Brief markdown summary of PLC requirements",
+    "summary": "One sentence describing extraction"
 }}
 
-Focus on:
-- Device specifications (motors, sensors, PLCs, I/O modules)
-- Electrical specifications (voltage, current, power)
-- I/O requirements and configurations
-- Safety requirements
-- Control sequences and timing
-"""
+Focus: Device specs, electrical specs, I/O requirements, safety, control sequences."""
