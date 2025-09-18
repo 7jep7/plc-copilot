@@ -9,6 +9,7 @@ import json
 import time
 import os
 import sys
+import uuid
 
 BASE_URL = "http://localhost:8001"
 
@@ -16,8 +17,12 @@ def test_complete_session_lifecycle():
     """Test complete file upload and cleanup lifecycle"""
     print("🧪 Testing Complete Session Lifecycle")
     
-    # 1. Initial request to get session_id
-    print("\n1️⃣ Starting new session...")
+    # 1. Generate session_id on frontend (client) side
+    session_id = str(uuid.uuid4())
+    print(f"\n1️⃣ Generated session_id: {session_id}")
+    
+    # 2. Initial request with frontend-generated session_id
+    print("\n2️⃣ Starting new session with generated session_id...")
     context_data = {
         "device_constants": {},
         "information": ""
@@ -28,7 +33,8 @@ def test_complete_session_lifecycle():
         data={
             "current_context": json.dumps(context_data),
             "current_stage": "gathering_requirements",
-            "message": "I want to control a conveyor belt system"
+            "message": "I want to control a conveyor belt system",
+            "session_id": session_id
         }
     )
     
@@ -37,10 +43,14 @@ def test_complete_session_lifecycle():
         return False
         
     result = response.json()
-    session_id = result.get("metadata", {}).get("session_id")
-    print(f"   ✅ Session created: {session_id}")
+    returned_session_id = result.get("session_id")
+    print(f"   ✅ Session started, returned session_id: {returned_session_id}")
     
-    # 2. Upload a test file
+    if returned_session_id != session_id:
+        print(f"   ❌ Session ID mismatch! Expected: {session_id}, Got: {returned_session_id}")
+        return False
+    
+    # 3. Upload a test file
     print("\n2️⃣ Uploading test file...")
     test_content = """Motor Specification Document
 
@@ -71,7 +81,8 @@ Installation Requirements:
             data = {
                 "current_context": json.dumps(context_data),
                 "current_stage": "gathering_requirements",
-                "message": "Here's my motor specification document"
+                "message": "Here's my motor specification document",
+                "session_id": session_id
             }
             
             response = requests.post(
@@ -88,13 +99,16 @@ Installation Requirements:
         print(f"   ✅ File uploaded successfully")
         print(f"   📋 Response preview: {result['chat_message'][:150]}...")
         
-        # Verify session_id persisted (though it won't be in response metadata)
-        uploaded_session_id = result.get("metadata", {}).get("session_id") 
+        # Verify session_id persisted
+        uploaded_session_id = result.get("session_id")
         if uploaded_session_id:
-            print(f"   Session ID from response: {uploaded_session_id}")
-            session_id = uploaded_session_id
+            print(f"   ✅ Session ID from response: {uploaded_session_id}")
+            if uploaded_session_id != session_id:
+                print(f"   ❌ Session ID mismatch! Expected: {session_id}, Got: {uploaded_session_id}")
+                return False
         else:
-            print("   Note: Session ID not returned in response (expected behavior)")
+            print("   ❌ Session ID not returned in response!")
+            return False
         
         # 3. Check session stats
         print("\n3️⃣ Checking session stats...")
@@ -115,7 +129,8 @@ Installation Requirements:
             data={
                 "current_context": json.dumps(result["updated_context"]),
                 "current_stage": "gathering_requirements", 
-                "message": "What are the motor specifications I uploaded? Please list the key details."
+                "message": "What are the motor specifications I uploaded? Please list the key details.",
+                "session_id": session_id
             }
         )
         

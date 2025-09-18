@@ -98,6 +98,9 @@ class ContextUpdateResponse(BaseModel):
     chat_message: str = Field(
         description="AI response message to display to user"
     )
+    session_id: str = Field(
+        description="Session ID for tracking files and conversation state across requests"
+    )
     gathering_requirements_estimated_progress: Optional[float] = Field(
         None,
         description="AI's estimation of requirements completion (0.0-1.0) for automatic stage transition",
