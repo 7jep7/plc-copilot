@@ -9,6 +9,7 @@ This module provides:
 """
 
 import logging
+import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -22,7 +23,7 @@ from app.schemas.context import (
     StageTransitionRequest,
     StageTransitionResponse
 )
-from app.services.simplified_context_service import SimplifiedContextService
+from app.services import get_context_service
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ async def update_context(
                     logger.info(f"Processing uploaded file: {file.filename} ({file.size} bytes)")
         
         # Process context update with simplified service
-        context_service = SimplifiedContextService()
+        context_service = get_context_service()
         response = await context_service.process_context_update(
             request, 
             uploaded_files=file_data_list if file_data_list else None,
@@ -171,3 +172,68 @@ async def transition_stage(
 async def context_health():
     """Health check endpoint for context API."""
     return {"status": "healthy", "service": "context-api"}
+
+
+@router.post("/cleanup")
+async def cleanup_session(session_id: str = Form(...)):
+    """
+    Clean up a session and its associated files.
+    
+    This endpoint allows the frontend to signal when a user session ends,
+    triggering cleanup of uploaded files from the vector store and memory.
+    
+    Args:
+        session_id: The session ID to clean up
+        
+    Returns:
+        Cleanup status and statistics
+    """
+    try:
+        logger.info(f"Session cleanup requested for: {session_id}")
+        
+        context_service = get_context_service()
+        cleanup_result = await context_service.cleanup_session_async(session_id)
+        
+        logger.info(f"Session cleanup completed for: {session_id}")
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "files_cleaned": cleanup_result.get("files_cleaned", 0),
+            "message": "Session cleaned up successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error during session cleanup: {str(e)}")
+        return {
+            "status": "error",
+            "session_id": session_id,
+            "message": f"Cleanup failed: {str(e)}"
+        }
+
+
+@router.get("/sessions/stats")
+async def get_session_stats():
+    """
+    Get statistics about active sessions and memory usage.
+    
+    Useful for monitoring system health and detecting memory leaks.
+    
+    Returns:
+        Session statistics including active count, file count, and ages
+    """
+    try:
+        context_service = get_context_service()
+        stats = context_service.get_session_stats()
+        
+        return {
+            "status": "success",
+            "stats": stats,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting session stats: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Stats unavailable: {str(e)}"
+        }
