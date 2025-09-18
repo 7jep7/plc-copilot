@@ -11,6 +11,7 @@ The assistant automatically accesses files from vector store vs_68cba48e219c8191
 """
 
 import uuid
+import random
 import logging
 from typing import Dict, List, Optional, Any
 from io import BytesIO
@@ -60,8 +61,13 @@ class SimplifiedContextService:
                 (request.current_context.device_constants or request.current_context.information)
             )
             has_files = bool(uploaded_files)
+            has_mcq_responses = bool(request.mcq_responses)
             
-            logger.info(f"Processing context update: has_context={has_context}, has_files={has_files}, stage={request.current_stage}, session_id={session_id}")
+            # If we have MCQ responses, treat as context update (user made progress)
+            if has_mcq_responses:
+                has_context = True
+            
+            logger.info(f"Processing context update: has_context={has_context}, has_files={has_files}, has_mcq_responses={has_mcq_responses}, stage={request.current_stage}, session_id={session_id}")
             
             if has_files:
                 # Case 3: File upload with optional context
@@ -69,7 +75,7 @@ class SimplifiedContextService:
                     request, uploaded_files, session_id
                 )
             elif has_context:
-                # Case 2: Context exists, update with assistant
+                # Case 2: Context exists, update with assistant (includes MCQ responses)
                 return await self._handle_context_update_case(request, session_id)
             else:
                 # Case 1: Project kickoff
@@ -88,15 +94,20 @@ class SimplifiedContextService:
         
         logger.info("Handling project kickoff case")
         
-        # Check if this is an off-topic start
+        # Check if this is an off-topic start (but MCQ responses are always considered on-topic)
         user_message = request.message or ""
-        if not self._is_plc_related(user_message):
+        has_mcq_response = bool(request.mcq_responses)
+        
+        if not has_mcq_response and not self._is_plc_related(user_message):
             # Offer sample projects via MCQ
             return self._create_sample_projects_response(session_id)
         
+        # Build message with MCQ responses if available
+        complete_message = self._build_user_message_with_mcq(request)
+        
         # Start gathering requirements with assistant
         assistant_response = await self.assistant_service.process_message(
-            user_message=user_message,
+            user_message=complete_message,
             current_context=None,
             file_ids=None
         )
@@ -205,17 +216,99 @@ class SimplifiedContextService:
     def _is_plc_related(self, message: str) -> bool:
         """Check if the message is related to PLC programming."""
         plc_keywords = [
+            # Core PLC terms
             "plc", "programmable logic", "structured text", "ladder logic",
-            "automation", "industrial", "control", "scada", "hmi",
-            "motor", "sensor", "actuator", "conveyor", "process control",
-            "safety", "interlock", "tag", "variable", "function block"
+            "automation", "industrial automation", "industrial control", "control system",
+            "scada", "hmi", "process control", "safety interlock", "safety system",
+            "motor control", "sensor", "actuator", "conveyor", "interlock", 
+            "tag", "variable", "function block",
+            
+            # Manufacturing & Production
+            "assembly line", "manufacturing", "factory automation", "production line",
+            "robotic", "packaging line", "rfid tracking", "manufacturing process",
+            "machine tool", "cnc", "metal cutting", "welding line", 
+            "injection molding", "steel mill", "rolling process",
+            
+            # Building & Infrastructure Systems
+            "hvac", "building management", "warehouse automation", "storage system", 
+            "automated storage", "power distribution", "load management", 
+            "elevator control", "baggage handling system",
+            
+            # Energy & Utilities
+            "solar panel tracking", "solar panel control", "wind turbine control", 
+            "power plant", "energy management system", "water treatment", 
+            "pump station", "boiler control", "steam management",
+            
+            # Specialized Industries
+            "semiconductor", "cleanroom management", "hospital system", 
+            "patient bed management", "airport system", "baggage handling",
+            "fish farm", "water quality management", "pharmaceutical",
+            "food processing", "chemical reactor", "process safety",
+            
+            # General Industrial Terms (more specific)
+            "management system", "environmental control system", "climate control system",
+            "temperature control", "pressure control", "monitoring system",
+            "distribution system", "crane control", "hoist control", "textile loom",
+            "brewery fermentation", "mining conveyor", "paper mill", "automotive paint",
+            "glass manufacturing", "oil refinery", "greenhouse control", 
+            "irrigation system", "equipment monitoring", "factory equipment",
+            
+            # Additional essential terms
+            "automate my factory", "factory", "plant", "industrial equipment"
         ]
         
         message_lower = message.lower()
         return any(keyword in message_lower for keyword in plc_keywords)
     
     def _create_sample_projects_response(self, session_id: str) -> ContextUpdateResponse:
-        """Create response with sample project options."""
+        """Create response with sample project options (randomly selected from 40 projects)."""
+        
+        # Comprehensive list of 40 sample PLC projects
+        all_sample_projects = [
+            "Conveyor Belt Control System with Safety Interlocks",
+            "Motor Speed Control with VFD Integration",
+            "Process Control with PID Temperature Regulation",
+            "Automated Packaging Line with RFID Tracking",
+            "Water Treatment Plant Control System",
+            "Assembly Line Robot Integration",
+            "HVAC Building Management System",
+            "Batch Mixing Process Control",
+            "Parking Garage Access Control",
+            "Traffic Light Control System",
+            "Warehouse Automated Storage and Retrieval",
+            "Chemical Reactor Temperature and Pressure Control",
+            "Elevator Control System with Safety Features",
+            "Food Processing Line with Quality Control",
+            "Solar Panel Tracking System",
+            "Pump Station Control with Redundancy",
+            "Machine Tool CNC Integration",
+            "Power Distribution and Load Management",
+            "Irrigation System with Soil Moisture Sensors",
+            "Pharmaceutical Tablet Press Control",
+            "Paint Booth Ventilation and Safety System",
+            "Boiler Control with Steam Management",
+            "Crane and Hoist Safety Control",
+            "Textile Loom Automation",
+            "Metal Cutting and Welding Line",
+            "Brewery Fermentation Process Control",
+            "Wind Turbine Control and Monitoring",
+            "Mining Conveyor and Crusher Control",
+            "Paper Mill Process Automation",
+            "Automotive Paint Line Control",
+            "Glass Manufacturing Temperature Control",
+            "Oil Refinery Process Safety System",
+            "Airport Baggage Handling System",
+            "Hospital Patient Bed Management",
+            "Data Center Environmental Control",
+            "Greenhouse Climate Control System",
+            "Fish Farm Water Quality Management",
+            "Plastic Injection Molding Control",
+            "Steel Mill Rolling Process Control",
+            "Semiconductor Cleanroom Management"
+        ]
+        
+        # Randomly select 3 projects
+        selected_projects = random.sample(all_sample_projects, 3)
         
         return ContextUpdateResponse(
             updated_context=ProjectContext(
@@ -225,11 +318,7 @@ class SimplifiedContextService:
             chat_message="I'd be happy to help you with PLC programming! Here are some sample projects to get started:",
             is_mcq=True,
             mcq_question="Which type of project would you like to work on?",
-            mcq_options=[
-                "Conveyor Belt Control System with Safety Interlocks",
-                "Motor Speed Control with VFD Integration", 
-                "Process Control with PID Temperature Regulation"
-            ],
+            mcq_options=selected_projects,
             is_multiselect=False,
             generated_code=None,
             current_stage=Stage.GATHERING_REQUIREMENTS,
