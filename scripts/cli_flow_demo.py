@@ -34,7 +34,61 @@ def pretty(obj):
 
 async def run_live_flow(request: ContextUpdateRequest, uploaded_files=None):
     svc = ContextProcessingService()
-    print("\n[Backend] Calling process_context_update (this will call the LLM internally)...\n")
+    
+    # Show the prompt that will be sent to the LLM
+    from app.services.prompt_templates import PromptTemplates
+    
+    # Extract file texts if files are provided
+    extracted_file_texts = []
+    if uploaded_files:
+        for file_content in uploaded_files:
+            # Reset file pointer and extract text
+            file_content.seek(0)
+            text = svc._extract_text_from_bytes(file_content.read())
+            extracted_file_texts.append(text)
+            file_content.seek(0)  # Reset for actual processing
+    
+    # Check if context is completely empty - matches service logic
+    context_is_empty = (
+        not request.current_context.device_constants and 
+        not request.current_context.information.strip()
+    )
+    
+    # Build and display the actual prompt that will be sent
+    if extracted_file_texts:
+        # Template B: For messages with files (always prioritize file processing)
+        prompt = PromptTemplates.build_template_b_prompt(
+            context=request.current_context,
+            stage=request.current_stage,
+            user_message=request.message,
+            mcq_responses=request.mcq_responses,
+            extracted_file_texts=extracted_file_texts,
+            previous_copilot_message=request.previous_copilot_message
+        )
+        print("\n[Backend -> LLM] Template B prompt (with files):\n")
+    elif context_is_empty and request.current_stage.value == "gathering_requirements":
+        # Empty context prompt: For completely new projects - optimized for off-topic detection
+        prompt = PromptTemplates.build_empty_context_prompt(
+            user_message=request.message,
+            mcq_responses=request.mcq_responses,
+            previous_copilot_message=request.previous_copilot_message
+        )
+        print("\n[Backend -> LLM] Empty Context prompt (off-topic detection optimized):\n")
+    else:
+        # Template A: For messages without files
+        prompt = PromptTemplates.build_template_a_prompt(
+            context=request.current_context,
+            stage=request.current_stage,
+            user_message=request.message,
+            mcq_responses=request.mcq_responses,
+            previous_copilot_message=request.previous_copilot_message
+        )
+        print("\n[Backend -> LLM] Template A prompt (no files):\n")
+    
+    print(prompt)
+    print("\n" + "="*80)
+    
+    print("\n[Backend] Calling process_context_update (this will call the LLM with the above prompt)...\n")
     response = await svc.process_context_update(request, uploaded_files=uploaded_files)
     print("\n[Backend -> Frontend] Final API response (ContextUpdateResponse):\n")
     out = response.model_dump()
@@ -61,9 +115,15 @@ def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
             text = svc._extract_text_from_bytes(file_content.read())
             extracted_file_texts.append(text[:1000] + "...[truncated]" if len(text) > 1000 else text)
     
+    # Check if context is completely empty - matches service logic
+    context_is_empty = (
+        not request.current_context.device_constants and 
+        not request.current_context.information.strip()
+    )
+    
     # Choose appropriate template and build prompt
     if extracted_file_texts:
-        # Template B: For messages with files
+        # Template B: For messages with files (always prioritize file processing)
         prompt = PromptTemplates.build_template_b_prompt(
             context=request.current_context,
             stage=request.current_stage,
@@ -72,6 +132,14 @@ def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
             extracted_file_texts=extracted_file_texts
         )
         print("\n[Backend -> LLM] Template B prompt (with files):\n")
+    elif context_is_empty and request.current_stage.value == "gathering_requirements":
+        # Empty context prompt: For completely new projects - optimized for off-topic detection
+        prompt = PromptTemplates.build_empty_context_prompt(
+            user_message=request.message,
+            mcq_responses=request.mcq_responses,
+            previous_copilot_message=request.previous_copilot_message
+        )
+        print("\n[Backend -> LLM] Empty Context prompt (off-topic detection optimized):\n")
     else:
         # Template A: For messages without files
         prompt = PromptTemplates.build_template_a_prompt(

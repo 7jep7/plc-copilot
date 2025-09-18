@@ -127,15 +127,28 @@ class ContextProcessingService:
         Returns:
             Complete context update response
         """
+        # Check if context is completely empty - use lightweight prompt for off-topic detection
+        context_is_empty = (
+            not request.current_context.device_constants and 
+            not request.current_context.information.strip()
+        )
+        
         # Build comprehensive prompt using appropriate template
         if extracted_file_texts:
-            # Template B: For messages with files
+            # Template B: For messages with files (always prioritize file processing)
             comprehensive_prompt = PromptTemplates.build_template_b_prompt(
                 context=request.current_context,
                 stage=request.current_stage,
                 user_message=request.message,
                 mcq_responses=request.mcq_responses,
                 extracted_file_texts=extracted_file_texts,
+                previous_copilot_message=request.previous_copilot_message
+            )
+        elif context_is_empty and request.current_stage == Stage.GATHERING_REQUIREMENTS:
+            # Use lightweight prompt optimized for off-topic detection
+            comprehensive_prompt = PromptTemplates.build_empty_context_prompt(
+                user_message=request.message,
+                mcq_responses=request.mcq_responses,
                 previous_copilot_message=request.previous_copilot_message
             )
         else:
@@ -210,6 +223,9 @@ class ContextProcessingService:
             # Try to parse JSON. If this fails, retry with a corrective prompt.
             try:
                 ai_response = json.loads(response_content)
+                # Ensure it's a dictionary
+                if not isinstance(ai_response, dict):
+                    raise json.JSONDecodeError(f"Response is not a JSON object: {type(ai_response)}", response_content, 0)
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON parse failed, retrying with corrective prompt. Error: {e}")
                 
@@ -263,6 +279,11 @@ Response must include: updated_context, chat_message, and all other required fie
                     logger.error(f"Corrective prompt also failed: {retry_error}")
                     # Fall back to error response instead of bad stage transition
                     raise ValueError(f"LLM failed to return valid JSON after retry. Original error: {e}, Retry error: {retry_error}")
+            
+            # Ensure ai_response is a dictionary before proceeding
+            if not isinstance(ai_response, dict):
+                logger.error(f"ai_response is not a dictionary: {type(ai_response)} - {ai_response}")
+                raise ValueError(f"LLM response is not a valid JSON object: {type(ai_response)}")
             
             # Extract updated context
             updated_context_data = ai_response.get("updated_context", {})

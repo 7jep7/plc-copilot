@@ -14,6 +14,63 @@ class PromptTemplates:
     """Manages prompt templates for different interaction scenarios."""
     
     @staticmethod
+    def build_empty_context_prompt(
+        user_message: Optional[str],
+        mcq_responses: List[str],
+        previous_copilot_message: Optional[str] = None
+    ) -> str:
+        """
+        Lightweight prompt for completely empty context - optimized for off-topic detection.
+        Used when both device_constants and information are empty.
+        """
+        # Build user input section
+        user_input_section = f"USER INPUT:\nMessage: {user_message or 'No message provided'}"
+        if mcq_responses:
+            user_input_section += f"\nMCQ Responses: {mcq_responses}"
+        
+        # Add conversation context if available
+        conversation_context = ""
+        if previous_copilot_message:
+            conversation_context = f"\nPREVIOUS CONTEXT: {previous_copilot_message}"
+        
+        return f"""=== PROJECT KICKOFF - EMPTY CONTEXT ===
+
+This is a completely new project with no existing context.
+
+{user_input_section}{conversation_context}
+
+CRITICAL TASK: Determine if the user input is automation-related or off-topic:
+
+**IF AUTOMATION-RELATED** (conveyor, motor, PLC, sensor, control, etc.): Ask an engaging follow-up question.
+
+**IF OFF-TOPIC** ("hey", "hello", casual chat, unrelated topics): MUST offer MCQ with 3 automation examples.
+
+The input "{user_message or 'No message'}" appears to be OFF-TOPIC. Provide 3 example automation projects as MCQ options.
+
+REQUIRED MCQ Examples for off-topic inputs:
+1. "Conveyor Belt Control System" 
+2. "Temperature Monitoring & Control"
+3. "Safety System with Emergency Stops"
+
+Return JSON with this EXACT structure:
+{{
+    "updated_context": {{
+        "device_constants": {{}},
+        "information": ""  // Keep empty for off-topic inputs
+    }},
+    "chat_message": "I'd be happy to help you with industrial automation! What type of project interests you?",
+    "is_mcq": true,  // MUST be true for off-topic inputs like "{user_message or 'No message'}"
+    "mcq_question": "What type of automation project interests you?",
+    "mcq_options": ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"],
+    "is_multiselect": false,
+    "generated_code": null,
+    "gathering_requirements_estimated_progress": 0.1,
+    "file_extractions": []
+}}
+
+ENFORCE: For casual greetings or off-topic inputs, ALWAYS return is_mcq=true with the 3 example projects."""
+    
+    @staticmethod
     def build_template_a_prompt(
         context: ProjectContext,
         stage: Stage,
