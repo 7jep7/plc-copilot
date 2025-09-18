@@ -77,18 +77,40 @@ class ContextProcessingService:
         
         # Extract text from uploaded files and process them asynchronously
         extracted_file_texts: List[str] = []
+        raw_file_texts: List[str] = []  # Fallback for when file processing fails
         file_results: List[FileProcessingResult] = []
         if uploaded_files:
-            for file_data in uploaded_files:
+            logger.info(f"Processing {len(uploaded_files)} uploaded files")
+            for i, file_data in enumerate(uploaded_files):
                 try:
                     file_bytes = file_data.getvalue()
+                    logger.info(f"Processing file {i+1}: {len(file_bytes)} bytes")
+                    
+                    # First extract raw text as fallback
+                    try:
+                        raw_text = self._extract_text_from_bytes(file_bytes)
+                        if raw_text:
+                            raw_file_texts.append(raw_text[:8000])  # Limit size
+                            logger.info(f"File {i+1} raw text extracted: {len(raw_text)} chars")
+                    except Exception as raw_e:
+                        logger.warning(f"Failed to extract raw text from file {i+1}: {raw_e}")
+                    
                     # Use async helper to process uploaded file (may call LLM)
                     result = await self._process_uploaded_file(file_bytes)
                     file_results.append(result)
+                    logger.info(f"File {i+1} processing result: {result.processing_summary}")
                     if result.extracted_information:
                         extracted_file_texts.append(result.extracted_information)
+                        logger.info(f"File {i+1} extracted {len(result.extracted_information)} chars of text")
+                    else:
+                        logger.warning(f"File {i+1} extraction resulted in no text content")
                 except Exception as e:
-                    logger.warning(f"Failed to extract/process uploaded file: {e}")
+                    logger.error(f"Failed to extract/process uploaded file {i+1}: {e}")
+            
+            logger.info(f"Total extracted file texts: {len(extracted_file_texts)}")
+            logger.info(f"Total raw file texts: {len(raw_file_texts)}")
+        else:
+            logger.info("No uploaded files to process")
 
         # Integrate file extraction results into the current context before the comprehensive LLM call
         current_ctx = request.current_context
@@ -100,10 +122,11 @@ class ContextProcessingService:
             ContextUpdateRequest(
                 message=request.message,
                 mcq_responses=request.mcq_responses,
+                previous_copilot_message=request.previous_copilot_message,
                 current_context=current_ctx,
                 current_stage=request.current_stage
             ),
-            extracted_file_texts
+            extracted_file_texts if extracted_file_texts else raw_file_texts
         )
 
         # Attach file_extractions produced earlier if the LLM didn't include them
@@ -149,6 +172,7 @@ class ContextProcessingService:
         # Build comprehensive prompt using appropriate template
         if extracted_file_texts:
             # Template B: For messages with files (always prioritize file processing)
+            logger.info(f"Using Template B (file processing) with {len(extracted_file_texts)} extracted texts")
             comprehensive_prompt = PromptTemplates.build_template_b_prompt(
                 context=request.current_context,
                 stage=request.current_stage,
@@ -164,6 +188,7 @@ class ContextProcessingService:
             # Use lightweight prompt optimized for off-topic detection ONLY if:
             # - Context is empty AND no MCQ responses AND no clear automation keywords
             # This ensures automation-related messages skip the off-topic detection
+            logger.info("Using empty context prompt (off-topic detection)")
             comprehensive_prompt = PromptTemplates.build_empty_context_prompt(
                 user_message=request.message,
                 mcq_responses=request.mcq_responses,
@@ -171,6 +196,7 @@ class ContextProcessingService:
             )
         else:
             # Template A: For messages without files (includes MCQ responses, automation keywords, or non-empty context)
+            logger.info("Using Template A (no files)")
             comprehensive_prompt = PromptTemplates.build_template_a_prompt(
                 context=request.current_context,
                 stage=request.current_stage,
@@ -490,82 +516,124 @@ Include all required fields for stage {request.current_stage}. Response must be 
     
     def _extract_text_from_bytes(self, file_bytes: bytes) -> str:
         """
-        Extract text from PDF file bytes.
+        Extract text from file bytes. Supports PDF, text files, and more.
         
         Args:
-            file_bytes: PDF file content as bytes
+            file_bytes: File content as bytes
             
         Returns:
             Extracted text content
         """
-        if not PDF_AVAILABLE:
-            return "PDF processing libraries not available"
-        
         text_content = []
         
+        # First try to detect if it's a text file
         try:
-            # Method 1: pdfplumber
-            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        text_content.append(text)
-        except Exception as e:
-            logger.warning(f"pdfplumber extraction from bytes failed: {e}")
+            # Try to decode as UTF-8 text
+            text = file_bytes.decode('utf-8')
+            if text.strip():
+                return text
+        except UnicodeDecodeError:
+            # Not a text file, continue with other methods
+            pass
         
-        if not text_content:
+        # Check if PDF processing is available and if this looks like a PDF
+        if PDF_AVAILABLE and file_bytes.startswith(b'%PDF'):
             try:
-                # Method 2: PyMuPDF
-                doc = fitz.open(stream=file_bytes, filetype="pdf")
-                for page_num in range(doc.page_count):
-                    page = doc[page_num]
-                    text = page.get_text()
-                    if text:
-                        text_content.append(text)
-                doc.close()
+                # Method 1: pdfplumber
+                with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            text_content.append(text)
             except Exception as e:
-                logger.warning(f"PyMuPDF extraction from bytes failed: {e}")
-        
-        if not text_content:
+                logger.warning(f"pdfplumber extraction from bytes failed: {e}")
+            
+            if not text_content:
+                try:
+                    # Method 2: PyMuPDF
+                    doc = fitz.open(stream=file_bytes, filetype="pdf")
+                    for page_num in range(doc.page_count):
+                        page = doc[page_num]
+                        text = page.get_text()
+                        if text:
+                            text_content.append(text)
+                    doc.close()
+                except Exception as e:
+                    logger.warning(f"PyMuPDF extraction from bytes failed: {e}")
+            
+            if not text_content:
+                try:
+                    # Method 3: PyPDF2
+                    pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
+                    for page in pdf_reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            text_content.append(text)
+                except Exception as e:
+                    logger.warning(f"PyPDF2 extraction from bytes failed: {e}")
+        else:
+            # For non-PDF files, try other approaches
             try:
-                # Method 3: PyPDF2
-                pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-                for page in pdf_reader.pages:
-                    text = page.extract_text()
-                    if text:
-                        text_content.append(text)
+                # Try to decode with different encodings
+                for encoding in ['utf-8', 'latin-1', 'ascii']:
+                    try:
+                        text = file_bytes.decode(encoding)
+                        if text.strip():
+                            return text
+                    except UnicodeDecodeError:
+                        continue
             except Exception as e:
-                logger.warning(f"PyPDF2 extraction from bytes failed: {e}")
+                logger.warning(f"Text extraction failed: {e}")
         
-        return "\n\n".join(text_content)
+        if text_content:
+            return "\n\n".join(text_content)
+        else:
+            # Last resort: return bytes info
+            return f"Binary file uploaded ({len(file_bytes)} bytes). Unable to extract text content."
 
 
     async def _process_uploaded_file(self, file_bytes: bytes) -> FileProcessingResult:
         """Async file processor used during request handling; calls the LLM to parse file content."""
         try:
             text = self._extract_text_from_bytes(file_bytes)
-            if not text:
-                return FileProcessingResult(extracted_devices={}, extracted_information="", processing_summary="No text extracted")
+            if not text or not text.strip():
+                return FileProcessingResult(
+                    extracted_devices={}, 
+                    extracted_information="", 
+                    processing_summary="No text extracted from file"
+                )
 
+            logger.info(f"Extracted {len(text)} characters from file, calling LLM for processing")
             prompt = self._build_file_extraction_prompt(text)
             chat_req = type("R", (), {"user_prompt": prompt, "model": None, "temperature": 0.7, "max_completion_tokens": 1024})
 
-            call = self.openai_service.chat_completion(chat_req, messages=[{"role": "user", "content": prompt}])
-            if hasattr(call, '__await__'):
-                raw = await call
-            else:
-                raw = call
+            try:
+                call = self.openai_service.chat_completion(chat_req, messages=[{"role": "user", "content": prompt}])
+                if hasattr(call, '__await__'):
+                    raw = await call
+                else:
+                    raw = call
 
-            # Normalize raw response
-            resp_text = None
-            if isinstance(raw, (list, tuple)) and len(raw) >= 1:
-                resp_text = raw[0]
-            elif hasattr(raw, 'content'):
-                resp_text = raw.content
-            elif isinstance(raw, str):
-                resp_text = raw
-            else:
-                resp_text = str(raw)
+                # Normalize raw response
+                resp_text = None
+                if isinstance(raw, (list, tuple)) and len(raw) >= 1:
+                    resp_text = raw[0]
+                elif hasattr(raw, 'content'):
+                    resp_text = raw.content
+                elif isinstance(raw, str):
+                    resp_text = raw
+                else:
+                    resp_text = str(raw)
+
+                logger.info(f"LLM file processing response received: {len(resp_text) if resp_text else 0} chars")
+            except Exception as llm_e:
+                logger.error(f"LLM call failed for file processing: {llm_e}")
+                # Fallback: return raw text as extracted information
+                return FileProcessingResult(
+                    extracted_devices={},
+                    extracted_information=text[:2000],  # Limit size
+                    processing_summary=f"LLM processing failed, returning raw text: {str(llm_e)}"
+                )
 
             import json as _json
             try:
