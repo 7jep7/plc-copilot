@@ -98,8 +98,8 @@ Create a `.env` file with the following variables:
 ```bash
 # OpenAI Configuration
 OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_ASSISTANT_ID=asst_your-assistant-id-here
-OPENAI_VECTOR_STORE_ID=vs_your-vector-store-id-here
+OPENAI_ASSISTANT_ID=your-assistant-id-here
+OPENAI_VECTOR_STORE_ID=your-vector-store-id-here
 
 # Database (SQLite for development)
 DATABASE_URL=sqlite:///./plc_copilot.db

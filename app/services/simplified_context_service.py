@@ -7,7 +7,7 @@ This service handles the three core interaction cases:
 3. File upload (file + optional context) → upload to vector store → assistant call
 
 Uses the AssistantService and VectorStoreService for streamlined processing.
-The assistant automatically accesses files from vector store vs_68cba48e219c8191acc9d25d32cf8130.
+The assistant automatically accesses files from the configured vector store.
 """
 
 import uuid
@@ -23,6 +23,7 @@ from app.schemas.context import (
 )
 from app.services.assistant_service import AssistantService
 from app.services.vector_store_service import VectorStoreService
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +212,7 @@ class SimplifiedContextService:
             "files_processed": len(uploaded_files),
             "files_uploaded": len(file_metadata),
             "session_id": session_id,
-            "vector_store_id": "vs_68cba48e219c8191acc9d25d32cf8130"
+            "vector_store_id": settings.OPENAI_VECTOR_STORE_ID
         }
         
         # Determine stage

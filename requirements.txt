@@ -10,10 +10,6 @@ alembic==1.12.1
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 
-# Redis for caching and background tasks
-redis==5.0.1
-celery==5.3.4
-
 # AI/ML
 openai>=1.6.1,<2.0.0
 langchain==0.0.340
