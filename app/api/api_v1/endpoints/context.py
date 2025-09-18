@@ -1,10 +1,10 @@
 """
-Context API endpoints for the unified context-centric approach.
+Context API endpoints for the simplified OpenAI Assistant approach.
 
 This module provides:
-- POST /api/v1/context/update - Main endpoint for all interactions
-- File upload support with immediate processing
-- Stage management and transitions
+- POST /api/v1/context/update - Main endpoint for all interactions using OpenAI Assistant
+- File upload support with RAG processing
+- Three core interaction cases handling
 - MCQ handling and progress tracking
 """
 
@@ -22,7 +22,7 @@ from app.schemas.context import (
     StageTransitionRequest,
     StageTransitionResponse
 )
-from app.services.context_service import ContextProcessingService
+from app.services.simplified_context_service import SimplifiedContextService
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +41,12 @@ async def update_context(
     files: List[UploadFile] = File(default=[])
 ) -> ContextUpdateResponse:
     """
-    Update project context with user input, MCQ responses, and/or file uploads.
+    Update project context using the simplified OpenAI Assistant approach.
     
-    This is the main endpoint that handles all user interactions:
-    - Text messages and responses
-    - Multiple choice question answers
-    - File uploads with immediate processing
-    - Stage management and transitions
+    Handles three core interaction cases:
+    1. Project kickoff (no context, no file) → start gathering info
+    2. Context update (context exists, no file) → update with assistant  
+    3. File upload (file + optional context) → extract + embed + merge → assistant call
     
     Args:
         message: User message or response
@@ -55,7 +54,7 @@ async def update_context(
         previous_copilot_message: Previous message from copilot for conversation continuity
         current_context: JSON string of current ProjectContext
         current_stage: Current workflow stage
-        files: List of uploaded files to process
+        files: List of uploaded files to process with RAG
         
     Returns:
         Complete context update response with updated context and UI state
@@ -105,17 +104,13 @@ async def update_context(
                     file_data_list.append(BytesIO(content))
                     logger.info(f"Processing uploaded file: {file.filename} ({file.size} bytes)")
         
-        # Process context update
-        context_service = ContextProcessingService()
-        proc = context_service.process_context_update(
+        # Process context update with simplified service
+        context_service = SimplifiedContextService()
+        response = await context_service.process_context_update(
             request, 
-            uploaded_files=file_data_list if file_data_list else None
+            uploaded_files=file_data_list if file_data_list else None,
+            session_id=getattr(context, 'session_id', None)
         )
-        # Support sync or async implementations/mocks
-        if hasattr(proc, '__await__'):
-            response = await proc
-        else:
-            response = proc
         
         logger.info(f"Context update completed, new stage: {response.current_stage}")
         return response
