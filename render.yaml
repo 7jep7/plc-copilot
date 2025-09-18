@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: "./build.sh"
-    startCommand: "uvicorn minimal_main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120 --workers 1"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 120 --workers 1"
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
@@ -12,11 +12,12 @@ services:
         fromDatabase:
           name: plc-copilot-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_ASSISTANT_ID
+        sync: false
+      - key: OPENAI_VECTOR_STORE_ID
+        sync: false
       - key: ENVIRONMENT
         value: "production"
       - key: DEBUG
@@ -33,49 +34,6 @@ services:
         value: "application/pdf,text/plain"
       - key: UPLOAD_DIR
         value: "/opt/render/project/src/uploads"
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
-
-  - type: worker
-    name: plc-copilot-worker
-    env: python
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A app.worker worker --loglevel=info"
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: plc-copilot-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: redis
-          name: plc-copilot-redis
-          property: connectionString
-
-  - type: redis
-    name: plc-copilot-redis
-    plan: starter
 
 databases:
   - name: plc-copilot-db

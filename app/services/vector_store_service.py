@@ -1,9 +1,8 @@
 """
-OpenAI Vector Store Service for Assistant integration.
+Vector Store Service for OpenAI Files
 
-This service handles file uploads to the OpenAI vector store (vs_68cba48e219c8191acc9d25d32cf8130)
-that is attached to the assistant. The assistant can then automatically search and reference
-these files during conversations without manual RAG implementation.
+This service handles file uploads to the OpenAI vector store using a
+configurable vector store ID from environment variables.
 """
 
 import logging
@@ -29,7 +28,7 @@ class VectorStoreService:
     
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY) if OPENAI_AVAILABLE else None
-        self.vector_store_id = "vs_68cba48e219c8191acc9d25d32cf8130"
+        self.vector_store_id = settings.OPENAI_VECTOR_STORE_ID
         self._session_files: Dict[str, List[str]] = {}  # Track uploaded file IDs per session
     
     async def upload_files_to_vector_store(

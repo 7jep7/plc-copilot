@@ -1,8 +1,8 @@
 """
 Simplified OpenAI Assistant Service for PLC Copilot.
 
-This service handles interactions with the OpenAI Assistant API using the
-pre-configured assistant with ID: asst_cBsowvawShNYZI1l1hevOBoy
+This service handles interactions with the OpenAI Assistant API using a
+configurable assistant ID from environment variables.
 
 The assistant is configured with system instructions and always returns
 structured JSON responses according to the plc_response_schema.
@@ -24,7 +24,7 @@ class AssistantService:
     
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.assistant_id = "asst_cBsowvawShNYZI1l1hevOBoy"
+        self.assistant_id = settings.OPENAI_ASSISTANT_ID
     
     async def process_message(
         self,
@@ -35,7 +35,7 @@ class AssistantService:
         """
         Process a user message through the OpenAI Assistant.
         
-        The assistant will automatically search the vector store (vs_68cba48e219c8191acc9d25d32cf8130)
+        The assistant will automatically search the configured vector store
         for relevant information from uploaded files.
         
         Args:

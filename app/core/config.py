@@ -23,11 +23,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
     TEST_DATABASE_URL: Optional[str] = None
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
-    
     # OpenAI
     OPENAI_API_KEY: str
+    OPENAI_ASSISTANT_ID: str
+    OPENAI_VECTOR_STORE_ID: str
     
     # Email Configuration for Notifications
     SMTP_HOST: str = "smtp.gmail.com"
@@ -46,10 +45,6 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_FILE_TYPES: List[str] = ["application/pdf", "text/plain"]
     UPLOAD_DIR: str = "uploads"
-    
-    # Celery Configuration
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
     
     # PLC Code Generation Settings
     DEFAULT_PLC_LANGUAGE: str = "structured_text"
