@@ -1,9 +1,5 @@
 """Services package initialization."""
 
-from app.services.document_service import DocumentService
-from app.services.plc_service import PLCService
-from app.services.digital_twin_service import DigitalTwinService
-from app.services.openai_service import OpenAIService
 from app.services.simplified_context_service import SimplifiedContextService
 
 # Global singleton instance for session management
@@ -17,10 +13,6 @@ def get_context_service() -> SimplifiedContextService:
     return _context_service_instance
 
 __all__ = [
-    "DocumentService",
-    "PLCService", 
-    "DigitalTwinService",
-    "OpenAIService",
     "SimplifiedContextService",
     "get_context_service",
 ]
