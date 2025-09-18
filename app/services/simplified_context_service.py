@@ -216,10 +216,45 @@ class SimplifiedContextService:
     def _is_plc_related(self, message: str) -> bool:
         """Check if the message is related to PLC programming."""
         plc_keywords = [
+            # Core PLC terms
             "plc", "programmable logic", "structured text", "ladder logic",
-            "automation", "industrial", "control", "scada", "hmi",
-            "motor", "sensor", "actuator", "conveyor", "process control",
-            "safety", "interlock", "tag", "variable", "function block"
+            "automation", "industrial automation", "industrial control", "control system",
+            "scada", "hmi", "process control", "safety interlock", "safety system",
+            "motor control", "sensor", "actuator", "conveyor", "interlock", 
+            "tag", "variable", "function block",
+            
+            # Manufacturing & Production
+            "assembly line", "manufacturing", "factory automation", "production line",
+            "robotic", "packaging line", "rfid tracking", "manufacturing process",
+            "machine tool", "cnc", "metal cutting", "welding line", 
+            "injection molding", "steel mill", "rolling process",
+            
+            # Building & Infrastructure Systems
+            "hvac", "building management", "warehouse automation", "storage system", 
+            "automated storage", "power distribution", "load management", 
+            "elevator control", "baggage handling system",
+            
+            # Energy & Utilities
+            "solar panel tracking", "solar panel control", "wind turbine control", 
+            "power plant", "energy management system", "water treatment", 
+            "pump station", "boiler control", "steam management",
+            
+            # Specialized Industries
+            "semiconductor", "cleanroom management", "hospital system", 
+            "patient bed management", "airport system", "baggage handling",
+            "fish farm", "water quality management", "pharmaceutical",
+            "food processing", "chemical reactor", "process safety",
+            
+            # General Industrial Terms (more specific)
+            "management system", "environmental control system", "climate control system",
+            "temperature control", "pressure control", "monitoring system",
+            "distribution system", "crane control", "hoist control", "textile loom",
+            "brewery fermentation", "mining conveyor", "paper mill", "automotive paint",
+            "glass manufacturing", "oil refinery", "greenhouse control", 
+            "irrigation system", "equipment monitoring", "factory equipment",
+            
+            # Additional essential terms
+            "automate my factory", "factory", "plant", "industrial equipment"
         ]
         
         message_lower = message.lower()
