@@ -93,7 +93,7 @@ class SimplifiedContextService:
                 
         except Exception as e:
             logger.error(f"Error processing context update: {e}")
-            return self._create_error_response(str(e), request)
+            return self._create_error_response(str(e), request, session_id or "error-session")
     
     async def _handle_project_kickoff_case(
         self, 
@@ -326,6 +326,7 @@ class SimplifiedContextService:
                 information=""
             ),
             chat_message="I'd be happy to help you with PLC programming! Here are some sample projects to get started:",
+            session_id=session_id,
             is_mcq=True,
             mcq_question="Which type of project would you like to work on?",
             mcq_options=selected_projects,
@@ -386,6 +387,7 @@ class SimplifiedContextService:
                 information=updated_context.get("information", "")
             ),
             chat_message=assistant_response.get("chat_message", ""),
+            session_id=session_id,
             is_mcq=assistant_response.get("is_mcq", False),
             mcq_question=assistant_response.get("mcq_question"),
             mcq_options=assistant_response.get("mcq_options", []),
@@ -400,7 +402,8 @@ class SimplifiedContextService:
     def _create_error_response(
         self, 
         error_message: str, 
-        request: ContextUpdateRequest
+        request: ContextUpdateRequest,
+        session_id: str
     ) -> ContextUpdateResponse:
         """Create error response."""
         
@@ -410,6 +413,7 @@ class SimplifiedContextService:
                 information=f"Error: {error_message}"
             ),
             chat_message="I apologize, but I encountered an error processing your request. Please try again.",
+            session_id=session_id,
             is_mcq=False,
             mcq_question=None,
             mcq_options=[],

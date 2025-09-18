@@ -38,6 +38,7 @@ async def update_context(
     previous_copilot_message: Optional[str] = Form(None),
     current_context: str = Form(...),  # JSON string of ProjectContext
     current_stage: Stage = Form(Stage.GATHERING_REQUIREMENTS),
+    session_id: str = Form(...),  # Frontend-generated session identifier
     # File uploads
     files: List[UploadFile] = File(default=[])
 ) -> ContextUpdateResponse:
@@ -55,6 +56,7 @@ async def update_context(
         previous_copilot_message: Previous message from copilot for conversation continuity
         current_context: JSON string of current ProjectContext
         current_stage: Current workflow stage
+        session_id: Frontend-generated unique session identifier (UUID recommended)
         files: List of uploaded files to process with RAG
         
     Returns:
@@ -110,7 +112,7 @@ async def update_context(
         response = await context_service.process_context_update(
             request, 
             uploaded_files=file_data_list if file_data_list else None,
-            session_id=getattr(context, 'session_id', None)
+            session_id=session_id
         )
         
         logger.info(f"Context update completed, new stage: {response.current_stage}")
