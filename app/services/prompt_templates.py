@@ -110,6 +110,12 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
         if context_is_empty and not mcq_responses:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        elif context_is_empty and mcq_responses:
+            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+            if any(resp in initial_mcq_options for resp in mcq_responses):
+                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -217,6 +223,12 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         critical_rules = []
         if context_is_empty and not extracted_file_texts:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        elif context_is_empty and mcq_responses and not extracted_file_texts:
+            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+            if any(resp in initial_mcq_options for resp in mcq_responses):
+                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -228,8 +240,6 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
             "- Set origin=\"user message\" for user devices, origin=\"file\" for file-extracted devices",
             "- If no files uploaded, return empty file_extractions array"
         ])
-        if mcq_responses:
-            critical_rules.append("- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options")
         
         return f"""You are a PLC programming assistant. Current context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
