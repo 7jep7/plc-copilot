@@ -110,6 +110,12 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
         if context_is_empty and not mcq_responses:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        elif context_is_empty and mcq_responses:
+            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+            if any(resp in initial_mcq_options for resp in mcq_responses):
+                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -217,6 +223,12 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         critical_rules = []
         if context_is_empty and not extracted_file_texts:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        elif context_is_empty and mcq_responses and not extracted_file_texts:
+            # Special case: User just selected an automation type from initial MCQ - start requirements gathering
+            initial_mcq_options = ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"]
+            if any(resp in initial_mcq_options for resp in mcq_responses):
+                critical_rules.append("- MCQ response indicates user selected automation type - BEGIN requirements gathering with focused follow-up questions")
+                critical_rules.append("- Store the automation type in information and start collecting detailed requirements")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -228,8 +240,6 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
             "- Set origin=\"user message\" for user devices, origin=\"file\" for file-extracted devices",
             "- If no files uploaded, return empty file_extractions array"
         ])
-        if mcq_responses:
-            critical_rules.append("- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options")
         
         return f"""You are a PLC programming assistant. Current context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
@@ -303,11 +313,16 @@ You may propose additional topic sections if they improve clarity or capture pro
 Organize the `information` field with clear sections. Be concise but generous in capturing useful details so the gathering stage is efficient and fast.
 Aim to minimize the number of turn-backs: prefer MCQs where they help extract standardized choices quickly, but always allow free-text follow-up when nuance is needed.
 
+## CLEAN UX REQUIREMENTS
+- **ASK ONLY ONE QUESTION** - Never ask multiple questions in a single response
+- **PREFER MCQ OPTIONS** - Use MCQ with 2-4 options whenever possible for faster user interaction
+- **KEEP IT FOCUSED** - Ask about the most critical missing piece of information
+
 ## INTELLIGENT PROGRESSION STRATEGY
 - **ANALYZE EXISTING CONTEXT**: Look at current information to understand what's already covered
 - **IDENTIFY GAPS**: Determine which areas need more detail or are completely missing
 - **PRIORITIZE FAST EXTRACTION**: Ask high-value questions (safety, I/O, platform) and use MCQs liberally to speed user responses
-- **ASK TARGETED QUESTIONS**: Craft specific questions or MCQs based on gaps and user's project type
+- **ASK ONE TARGETED QUESTION**: Craft a single specific question or MCQ based on gaps and user's project type
 - **MCQ USAGE GUIDANCE**: Use MCQs generously for standardized choices (protocols, voltage, safety categories, common configuration options). Provide multi-select options when appropriate.
 
 ## COMPLETION CRITERIA (be reasonably lenient to encourage flow)
@@ -333,6 +348,36 @@ When you assess 1.0 completion, the frontend will automatically transition to co
             stage_instructions = """
 STAGE: Code Generation
 
+MANDATORY: You MUST always generate Structured Text (ST) code, even if context is minimal or sparse.
+
+## CODE GENERATION RULES:
+1. **ALWAYS generate code** - even if it's just a basic ST framework
+2. **If context is insufficient** - generate minimal framework code AND ask ONE focused question with MCQ options
+3. **Never ask multiple questions** - limit to one question with 2-4 MCQ options
+4. **Keep UX clean** - single focused interaction, not multiple follow-ups
+
+## MINIMAL FRAMEWORK CODE (when context is sparse):
+Generate at least this basic structure:
+```
+PROGRAM Main
+VAR
+    // Basic variable declarations
+    start_button : BOOL;
+    stop_button : BOOL;
+    system_running : BOOL;
+END_VAR
+
+// Main control logic
+IF start_button AND NOT stop_button THEN
+    system_running := TRUE;
+ELSIF stop_button THEN
+    system_running := FALSE;
+END_IF;
+
+END_PROGRAM
+```
+
+## COMPLETE CODE (when context is sufficient):
 Generate complete, production-ready Structured Text (ST) code including:
 - Variable declarations (inputs, outputs, internal variables)
 - Function blocks and programs
@@ -342,6 +387,11 @@ Generate complete, production-ready Structured Text (ST) code including:
 Structure: TYPE declarations → PROGRAM → VAR sections → Main logic → Safety/error handling
 
 CRITICAL: The Structured Text code must be properly escaped as a JSON string value.
+
+## WHEN TO ASK ADDITIONAL QUESTIONS:
+If you need ONE critical piece of information to enhance the code, ask a single focused question with MCQ options. Examples:
+- "What type of system are you controlling?" with options like ["Conveyor System", "Motor Control", "Process Control", "Safety System"]
+- "What's your primary control objective?" with options like ["Start/Stop Control", "Speed Control", "Temperature Control", "Safety Monitoring"]
 """
             expected_response_fields = """
     "chat_message": "I've generated the Structured Text code based on your requirements. You can now review and refine it.",
