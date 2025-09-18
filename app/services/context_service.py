@@ -133,6 +133,19 @@ class ContextProcessingService:
             not request.current_context.information.strip()
         )
         
+        # Check if message contains clear automation keywords
+        def contains_automation_keywords(message: str) -> bool:
+            if not message:
+                return False
+            message_lower = message.lower()
+            automation_keywords = [
+                'automate', 'automation', 'conveyor', 'motor', 'plc', 'sensor', 'control', 
+                'manufacturing', 'industrial', 'process', 'system', 'machine', 'equipment', 
+                'safety', 'start', 'stop', 'sequence', 'monitoring', 'temperature', 'pressure',
+                'valve', 'pump', 'actuator', 'relay', 'switch', 'alarm', 'interlock'
+            ]
+            return any(keyword in message_lower for keyword in automation_keywords)
+        
         # Build comprehensive prompt using appropriate template
         if extracted_file_texts:
             # Template B: For messages with files (always prioritize file processing)
@@ -144,15 +157,20 @@ class ContextProcessingService:
                 extracted_file_texts=extracted_file_texts,
                 previous_copilot_message=request.previous_copilot_message
             )
-        elif context_is_empty and request.current_stage == Stage.GATHERING_REQUIREMENTS:
-            # Use lightweight prompt optimized for off-topic detection
+        elif (context_is_empty and 
+              request.current_stage == Stage.GATHERING_REQUIREMENTS and 
+              not request.mcq_responses and 
+              not contains_automation_keywords(request.message or "")):
+            # Use lightweight prompt optimized for off-topic detection ONLY if:
+            # - Context is empty AND no MCQ responses AND no clear automation keywords
+            # This ensures automation-related messages skip the off-topic detection
             comprehensive_prompt = PromptTemplates.build_empty_context_prompt(
                 user_message=request.message,
                 mcq_responses=request.mcq_responses,
                 previous_copilot_message=request.previous_copilot_message
             )
         else:
-            # Template A: For messages without files
+            # Template A: For messages without files (includes MCQ responses, automation keywords, or non-empty context)
             comprehensive_prompt = PromptTemplates.build_template_a_prompt(
                 context=request.current_context,
                 stage=request.current_stage,
