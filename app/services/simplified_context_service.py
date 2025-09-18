@@ -13,6 +13,8 @@ The assistant automatically accesses files from vector store vs_68cba48e219c8191
 import uuid
 import random
 import logging
+import asyncio
+import time
 from typing import Dict, List, Optional, Any
 from io import BytesIO
 
@@ -32,6 +34,8 @@ class SimplifiedContextService:
         self.assistant_service = AssistantService()
         self.vector_store_service = VectorStoreService()
         self._active_sessions: Dict[str, List[str]] = {}  # Track uploaded file IDs per session
+        self._session_timestamps: Dict[str, float] = {}  # Track last access time per session
+        self._session_timeout_minutes = 30  # Session timeout in minutes
     
     async def process_context_update(
         self,
@@ -54,6 +58,12 @@ class SimplifiedContextService:
             # Generate session ID if not provided
             if not session_id:
                 session_id = str(uuid.uuid4())
+            
+            # Update session timestamp
+            self._session_timestamps[session_id] = time.time()
+            
+            # Clean up expired sessions periodically
+            await self._cleanup_expired_sessions()
             
             # Determine which case we're handling
             has_context = bool(
@@ -415,7 +425,76 @@ class SimplifiedContextService:
             # Clean up vector store files
             asyncio.create_task(self.vector_store_service.cleanup_session_files(session_id))
             del self._active_sessions[session_id]
+            if session_id in self._session_timestamps:
+                del self._session_timestamps[session_id]
             logger.info(f"Cleaned up session: {session_id}")
+
+    async def cleanup_session_async(self, session_id: str) -> Dict[str, Any]:
+        """Async cleanup of session with detailed results."""
+        result = {"files_cleaned": 0, "success": True}
+        
+        try:
+            if session_id in self._active_sessions:
+                file_count = len(self._active_sessions[session_id])
+                
+                # Clean up vector store files
+                await self.vector_store_service.cleanup_session_files(session_id)
+                
+                # Remove from tracking
+                del self._active_sessions[session_id]
+                if session_id in self._session_timestamps:
+                    del self._session_timestamps[session_id]
+                
+                result["files_cleaned"] = file_count
+                logger.info(f"Cleaned up session {session_id}: {file_count} files removed")
+            else:
+                logger.info(f"Session {session_id} not found or already cleaned up")
+                
+        except Exception as e:
+            logger.error(f"Error cleaning up session {session_id}: {e}")
+            result["success"] = False
+            result["error"] = str(e)
+        
+        return result
+
+    async def _cleanup_expired_sessions(self) -> None:
+        """Clean up sessions that have expired based on timeout."""
+        try:
+            current_time = time.time()
+            timeout_seconds = self._session_timeout_minutes * 60
+            expired_sessions = []
+            
+            for session_id, last_access in self._session_timestamps.items():
+                if current_time - last_access > timeout_seconds:
+                    expired_sessions.append(session_id)
+            
+            if expired_sessions:
+                logger.info(f"Cleaning up {len(expired_sessions)} expired sessions")
+                for session_id in expired_sessions:
+                    await self.cleanup_session_async(session_id)
+                    
+        except Exception as e:
+            logger.error(f"Error during expired session cleanup: {e}")
+
+    def get_session_stats(self) -> Dict[str, Any]:
+        """Get statistics about active sessions."""
+        current_time = time.time()
+        active_count = len(self._active_sessions)
+        total_files = sum(len(files) for files in self._active_sessions.values())
+        
+        # Calculate session ages
+        session_ages = []
+        for session_id, timestamp in self._session_timestamps.items():
+            age_minutes = (current_time - timestamp) / 60
+            session_ages.append(age_minutes)
+        
+        return {
+            "active_sessions": active_count,
+            "total_files_tracked": total_files,
+            "avg_session_age_minutes": sum(session_ages) / len(session_ages) if session_ages else 0,
+            "oldest_session_age_minutes": max(session_ages) if session_ages else 0,
+            "timeout_minutes": self._session_timeout_minutes
+        }
 
 # Import asyncio for cleanup task
 import asyncio
