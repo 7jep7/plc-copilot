@@ -179,20 +179,61 @@ def run_dry_flow(request: ContextUpdateRequest, uploaded_files=None):
 
 async def interactive_loop(live: bool):
     print("Interactive CLI demo: Frontend -> Backend -> LLM -> Backend -> Frontend")
-    print("Type 'exit' to quit.\n")
+    print("Type 'exit' to quit, 'reset' to start over with empty context.")
+    print("💡 Example automation projects to test:")
+    print("  - Conveyor belt control with safety stops")
+    print("  - Temperature monitoring and control system")
+    print("  - Motor control with VFD")
+    print("  - Packaging line automation")
+    print("  - Water treatment plant control")
+    print("\n⚡ Quick shortcuts:")
+    print("  - 'quick:conveyor' - Start conveyor belt project")
+    print("  - 'quick:temp' - Start temperature control project") 
+    print("  - 'quick:motor' - Start motor control project")
+    print("\n🎯 Goal: Build up requirements until progress reaches 100% and transitions to code generation\n")
 
     current_context = ProjectContext()
     current_stage = Stage.GATHERING_REQUIREMENTS
+    previous_copilot_message = None
 
     while True:
         print("\n=== New Interaction ===")
         print(f"Current stage: {current_stage.value}")
-        print(f"Current context (summary): {current_context.information[:200]!r}")
+        print(f"Current context summary:")
+        print(f"  - Device constants: {len(current_context.device_constants)} devices")
+        print(f"  - Information length: {len(current_context.information)} chars")
+        if current_context.information:
+            print(f"  - Information preview: {current_context.information[:200]!r}...")
 
-        message = input("Frontend: Enter message (or press ENTER to send minimal update): ")
+        message = input("\nFrontend: Enter message (or ENTER for minimal update, 'exit' to quit, 'reset' to restart): ")
+        
         if message.strip().lower() == "exit":
             print("Exiting interactive demo.")
             break
+        elif message.strip().lower() == "reset":
+            print("Resetting context to empty state...")
+            current_context = ProjectContext()
+            current_stage = Stage.GATHERING_REQUIREMENTS
+            previous_copilot_message = None
+            continue
+        elif message.strip().lower().startswith("quick:"):
+            # Quick test scenarios
+            scenario = message.strip()[6:].strip()
+            if scenario == "conveyor":
+                message = "I want to control a conveyor belt system with safety stops and speed control"
+            elif scenario == "temp":
+                message = "I need a temperature monitoring and control system for a heating process"
+            elif scenario == "motor":
+                message = "I want to control a motor with VFD and safety interlocks"
+            else:
+                print(f"Unknown quick scenario: {scenario}")
+                continue
+
+        # Handle MCQ responses
+        mcq_responses = []
+        mcq_input = input("Frontend: MCQ responses (comma-separated, or ENTER for none): ")
+        if mcq_input.strip():
+            mcq_responses = [r.strip() for r in mcq_input.split(",")]
 
         stage_in = input(f"Frontend: Desired stage [{current_stage.value}] (press ENTER to keep): ")
         if stage_in.strip():
@@ -216,9 +257,10 @@ async def interactive_loop(live: bool):
 
         req = ContextUpdateRequest(
             message=message or None,
-            mcq_responses=[],
+            mcq_responses=mcq_responses,
             current_context=current_context,
-            current_stage=current_stage
+            current_stage=current_stage,
+            previous_copilot_message=previous_copilot_message
         )
 
         print("\n[Frontend -> Backend] POST /api/v1/context/update payload:\n")
@@ -228,21 +270,53 @@ async def interactive_loop(live: bool):
         if live:
             try:
                 resp = await run_live_flow(req, uploaded_files=uploaded_files)
+                
                 # Update local context with response
-                updated = resp.updated_context
-                current_context = ProjectContext(**updated.model_dump())
+                current_context = ProjectContext(**resp.updated_context.model_dump())
                 current_stage = resp.current_stage
+                previous_copilot_message = resp.chat_message
+                
+                # Show progress information
+                if resp.gathering_requirements_estimated_progress is not None:
+                    progress_pct = int(resp.gathering_requirements_estimated_progress * 100)
+                    print(f"\n[Progress] Requirements gathering: {progress_pct}% complete")
+                    if resp.gathering_requirements_estimated_progress >= 1.0:
+                        print("🎉 Requirements gathering complete! Ready for code generation.")
+                        print("💡 Tip: Set stage to 'code_generation' in next interaction to generate code.")
+                
+                # Show MCQ information if present
+                if resp.is_mcq:
+                    print(f"\n[MCQ] Question: {resp.mcq_question}")
+                    print(f"[MCQ] Options: {resp.mcq_options}")
+                    print(f"[MCQ] Multi-select: {resp.is_multiselect}")
+                
+                # Show generated code if present
+                if resp.generated_code:
+                    print(f"\n[Code Generated] {len(resp.generated_code)} characters of Structured Text")
+                    print(f"Preview: {resp.generated_code[:200]}...")
+                
             except Exception as e:
                 print(f"Error during live flow: {e}")
         else:
             simulated = run_dry_flow(req, uploaded_files=uploaded_files)
-            # don't mutate context in dry-run
+            # Don't mutate context in dry-run
 
-        cont = input("Do another interaction? (y/n) ")
+        cont = input("\nContinue with another interaction? (y/n) ")
         if cont.strip().lower() not in ("y", "yes"):
             break
 
-    print("Interactive demo finished.")
+    # Final context summary
+    print("\n=== Final Context Summary ===")
+    print(f"Stage: {current_stage.value}")
+    print(f"Device constants: {len(current_context.device_constants)} devices")
+    if current_context.device_constants:
+        for name, device in current_context.device_constants.items():
+            print(f"  - {name}: {type(device).__name__ if hasattr(device, '__class__') else 'dict'}")
+    print(f"Information: {len(current_context.information)} characters")
+    if current_context.information:
+        print(f"Preview:\n{current_context.information[:500]}...")
+    
+    print("\nInteractive demo finished.")
 
 
 def main():

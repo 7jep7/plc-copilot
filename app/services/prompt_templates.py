@@ -35,7 +35,9 @@ class PromptTemplates:
         
         return f"""You are a PLC programming assistant. This is a new project with empty context.
 
-{user_input_section}{conversation_context}
+{conversation_context}
+
+{user_input_section}
 
 TASK: Determine if input is automation-related or off-topic:
 - IF AUTOMATION-RELATED (conveyor, motor, PLC, sensor, control): Ask follow-up question
@@ -122,7 +124,9 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}{conversation_context}
+{conversation_context}
+
+{user_input_section}
 
 {stage_instructions}
 
@@ -229,7 +233,9 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}{conversation_context}
+{conversation_context}
+
+{user_input_section}
 
 {stage_instructions}
 
