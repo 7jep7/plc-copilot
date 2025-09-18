@@ -97,17 +97,19 @@ RESPONSE: Return ONLY valid JSON (no markdown, no extra text):
         if previous_copilot_message:
             conversation_context = f"\nCONVERSATION CONTEXT: Previous copilot message was: {previous_copilot_message}"
         
-        # Build special handling section (only if context is empty)
+        # Build special handling section (only if context is empty AND no MCQ responses)
         special_handling_section = ""
-        if context_is_empty:
+        if context_is_empty and not mcq_responses:
             special_handling_section = """
 SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
 If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
         
         # Build critical rules (conditional based on context and inputs)
         critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
-        if context_is_empty:
+        if context_is_empty and not mcq_responses:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
+        if mcq_responses:
+            critical_rules.append("- MCQ responses are NEVER off-topic - they represent valid automation project selections")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",

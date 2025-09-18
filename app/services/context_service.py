@@ -144,15 +144,16 @@ class ContextProcessingService:
                 extracted_file_texts=extracted_file_texts,
                 previous_copilot_message=request.previous_copilot_message
             )
-        elif context_is_empty and request.current_stage == Stage.GATHERING_REQUIREMENTS:
-            # Use lightweight prompt optimized for off-topic detection
+        elif context_is_empty and request.current_stage == Stage.GATHERING_REQUIREMENTS and not request.mcq_responses:
+            # Use lightweight prompt optimized for off-topic detection ONLY if no MCQ responses
+            # MCQ responses should never be treated as off-topic, even with empty context
             comprehensive_prompt = PromptTemplates.build_empty_context_prompt(
                 user_message=request.message,
                 mcq_responses=request.mcq_responses,
                 previous_copilot_message=request.previous_copilot_message
             )
         else:
-            # Template A: For messages without files
+            # Template A: For messages without files (includes MCQ responses with empty context)
             comprehensive_prompt = PromptTemplates.build_template_a_prompt(
                 context=request.current_context,
                 stage=request.current_stage,
