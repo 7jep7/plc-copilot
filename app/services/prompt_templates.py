@@ -14,6 +14,54 @@ class PromptTemplates:
     """Manages prompt templates for different interaction scenarios."""
     
     @staticmethod
+    def build_empty_context_prompt(
+        user_message: Optional[str],
+        mcq_responses: List[str],
+        previous_copilot_message: Optional[str] = None
+    ) -> str:
+        """
+        Lightweight prompt for completely empty context - optimized for off-topic detection.
+        Used when both device_constants and information are empty.
+        """
+        # Build user input section
+        user_input_section = f"USER INPUT:\nMessage: {user_message or 'No message provided'}"
+        if mcq_responses:
+            user_input_section += f"\nMCQ Responses: {mcq_responses}"
+        
+        # Add conversation context if available
+        conversation_context = ""
+        if previous_copilot_message:
+            conversation_context = f"\nPREVIOUS CONTEXT: {previous_copilot_message}"
+        
+        return f"""You are a PLC programming assistant. This is a new project with empty context.
+
+{conversation_context}
+
+{user_input_section}
+
+TASK: Determine if input is automation-related or off-topic:
+- IF AUTOMATION-RELATED (conveyor, motor, PLC, sensor, control): Ask follow-up question
+- IF OFF-TOPIC ("hey", "hello", casual chat): Offer MCQ with 3 automation examples
+
+For off-topic inputs like "{user_message or 'No message'}", provide these MCQ options:
+1. "Conveyor Belt Control System"
+2. "Temperature Monitoring & Control" 
+3. "Safety System with Emergency Stops"
+
+RESPONSE: Return ONLY valid JSON (no markdown, no extra text):
+{{
+    "updated_context": {{"device_constants": {{}}, "information": ""}},
+    "chat_message": "I'd be happy to help you with industrial automation! What type of project interests you?",
+    "is_mcq": true,
+    "mcq_question": "What type of automation project interests you?",
+    "mcq_options": ["Conveyor Belt Control System", "Temperature Monitoring & Control", "Safety System with Emergency Stops"],
+    "is_multiselect": false,
+    "generated_code": null,
+    "gathering_requirements_estimated_progress": 0.1,
+    "file_extractions": []
+}}"""
+    
+    @staticmethod
     def build_template_a_prompt(
         context: ProjectContext,
         stage: Stage,
@@ -72,37 +120,34 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
             "- No file processing needed - file_extractions always empty array"
         ])
         
-        return f"""=== DIRECT USER INTERACTION ===
-
-Current Project Context:
+        return f"""You are a PLC programming assistant. Current context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}{conversation_context}
+{conversation_context}
+
+{user_input_section}
 
 {stage_instructions}
 
-TASK: Use your expertise to intelligently analyze the current context, assess requirements completion progress, update the context with structured information, and determine the most appropriate next action (ask follow-up questions or proceed to code generation).{special_handling_section}
+TASK: Analyze context, assess progress, update with structured information, determine next action.{special_handling_section}
 
-Return a JSON object with this EXACT structure:
+RESPONSE: Return ONLY valid JSON (no markdown, no extra text):
 {{
     "updated_context": {{
         "device_constants": {{
             "DeviceName": {{
-                "data": {{
-                    // Device specifications and properties
-                }},
-                "origin": "user message"  // Options: "file", "user message", "internet", "internal knowledge base", "other"
+                "data": {{}},
+                "origin": "user message"
             }}
         }},
-        "information": "INTELLIGENTLY STRUCTURED markdown summary using the section headers provided in stage instructions (## Safety Requirements, ## I/O Specifications, etc.). Be GENEROUS with information storage - capture ALL relevant details from user input. Include requirements, preferences, constraints, goals, operational details, environmental factors, conversation history, etc. Use consistent markdown formatting to help future analysis. Do NOT duplicate device constants here."
+        "information": "Structured markdown summary using stage instructions headers. Capture ALL relevant details."
     }},
     {expected_response_fields}
     "file_extractions": []
 }}
 
-CRITICAL RULES:
-{chr(10).join(critical_rules)}"""
+RULES: {'; '.join(critical_rules)}"""
     
     @staticmethod
     def build_template_b_prompt(
@@ -184,50 +229,40 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         if mcq_responses:
             critical_rules.append("- For MCQ responses: set is_mcq=true, provide mcq_question and mcq_options")
         
-        return f"""=== PRIMARY CONTEXT (MOST IMPORTANT) ===
-
-Current Project Context:
+        return f"""You are a PLC programming assistant. Current context:
 Device Constants: {json.dumps(device_constants_dict, indent=2)}
 Information: {context.information}
 
-{user_input_section}{conversation_context}
+{conversation_context}
+
+{user_input_section}
 
 {stage_instructions}
 
-TASK: Use your expertise to intelligently analyze the current context and files, assess requirements completion progress, update the context with structured information, extract relevant file data, and determine the most appropriate next action.{special_handling_section}
+TASK: Analyze context and files, assess progress, update with structured information, extract file data, determine next action.{special_handling_section}
 
-Return a JSON object with this EXACT structure:
+RESPONSE: Return ONLY valid JSON (no markdown, no extra text):
 {{
     "updated_context": {{
         "device_constants": {{
             "DeviceName": {{
-                "data": {{
-                    // Device specifications and properties  
-                }},
-                "origin": "user message"  // For user input devices, or "file" for file-extracted devices
+                "data": {{}},
+                "origin": "user message"
             }}
         }},
-        "information": "INTELLIGENTLY STRUCTURED markdown summary using the section headers provided in stage instructions (## Safety Requirements, ## I/O Specifications, etc.). Be GENEROUS with information storage - capture ALL relevant details from user input and file data. Include requirements, preferences, constraints, goals, operational details, environmental factors, conversation history, etc. Use consistent markdown formatting to help future analysis. Do NOT duplicate device constants here."
+        "information": "Structured markdown summary. Capture ALL relevant details from user input and files."
     }},
     {expected_response_fields}
     "file_extractions": [
         {{
-            "extracted_devices": {{
-                "DeviceName": {{
-                    "data": {{
-                        // Device specs extracted from files
-                    }},
-                    "origin": "file"
-                }}
-            }},
+            "extracted_devices": {{"DeviceName": {{"data": {{}}, "origin": "file"}}}},
             "extracted_information": "Brief PLC-relevant summary from files",
             "processing_summary": "One sentence about what was extracted"
         }}
     ]
 }}
 
-CRITICAL RULES:
-{chr(10).join(critical_rules)}{file_content_section}"""
+RULES: {'; '.join(critical_rules)}{file_content_section}"""
     
     @staticmethod
     def _get_stage_instructions(stage: Stage, context: Optional[ProjectContext] = None) -> tuple[str, str]:
