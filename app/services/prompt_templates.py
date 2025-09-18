@@ -40,8 +40,10 @@ class PromptTemplates:
 {user_input_section}
 
 TASK: Determine if input is automation-related or off-topic:
-- IF AUTOMATION-RELATED (conveyor, motor, PLC, sensor, control): Ask follow-up question
-- IF OFF-TOPIC ("hey", "hello", casual chat): Offer MCQ with 3 automation examples
+- IF AUTOMATION-RELATED (conveyor, motor, PLC, sensor, control, automate, automation, manufacturing, industrial, process, system, machine, equipment, safety, start, stop, sequence, monitoring, temperature, pressure): Ask follow-up question and begin requirements gathering
+- IF OFF-TOPIC ("hey", "hello", casual chat, unrelated topics): Offer MCQ with 3 automation examples
+
+IMPORTANT: Be generous in recognizing automation intent. Phrases like "automate a conveyor", "control system", "start stop sequence", "monitoring", etc. are clearly automation-related.
 
 For off-topic inputs like "{user_message or 'No message'}", provide these MCQ options:
 1. "Conveyor Belt Control System"
@@ -108,8 +110,6 @@ If the user's message has nothing to do with industrial automation, offer 3 illu
         critical_rules = ["- Focus entirely on user message" + (" and MCQ responses" if mcq_responses else "")]
         if context_is_empty and not mcq_responses:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
-        if mcq_responses:
-            critical_rules.append("- MCQ responses are NEVER off-topic - they represent valid automation project selections")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
             "- ESTIMATE PROGRESS: Provide expert assessment of requirements completion (0.0-1.0)",
@@ -207,15 +207,15 @@ Uploaded file content:
         if previous_copilot_message:
             conversation_context = f"\nCONVERSATION CONTEXT: Previous copilot message was: {previous_copilot_message}"
         
-        # Build special handling section (only if context is empty)
+        # Build special handling section (only if context is empty AND no file uploads AND potentially off-topic)
         special_handling_section = ""
-        if context_is_empty:
+        if context_is_empty and not extracted_file_texts:
             special_handling_section = """
 SPECIAL HANDLING FOR OFF-TOPIC REQUESTS:
 If the user's message has nothing to do with industrial automation, offer 3 illustrative example automation projects as MCQ options instead of trying to force automation context."""
         
         critical_rules = []
-        if context_is_empty:
+        if context_is_empty and not extracted_file_texts:
             critical_rules.append("- If user input is off-topic: Suggest 3 automation project examples as MCQ")
         critical_rules.extend([
             "- ANALYZE EXISTING CONTEXT: Intelligently assess current topic coverage and identify gaps",
