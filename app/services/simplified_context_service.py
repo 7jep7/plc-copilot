@@ -546,25 +546,49 @@ class SimplifiedContextService:
     ) -> ContextUpdateResponse:
         """Convert assistant response to ContextUpdateResponse."""
         
-        updated_context = assistant_response.get("updated_context", {})
+        # Clean the assistant response to remove any problematic field names
+        cleaned_response = self._clean_response_data(assistant_response)
+        updated_context = cleaned_response.get("updated_context", {})
         
         return ContextUpdateResponse(
             updated_context=ProjectContext(
                 device_constants=updated_context.get("device_constants", {}),
                 information=updated_context.get("information", "")
             ),
-            chat_message=assistant_response.get("chat_message", ""),
+            chat_message=cleaned_response.get("chat_message", ""),
             session_id=session_id,
-            is_mcq=assistant_response.get("is_mcq", False),
-            mcq_question=assistant_response.get("mcq_question"),
-            mcq_options=assistant_response.get("mcq_options", []),
-            is_multiselect=assistant_response.get("is_multiselect", False),
-            generated_code=assistant_response.get("generated_code"),
+            is_mcq=cleaned_response.get("is_mcq", False),
+            mcq_question=cleaned_response.get("mcq_question"),
+            mcq_options=cleaned_response.get("mcq_options", []),
+            is_multiselect=cleaned_response.get("is_multiselect", False),
+            generated_code=cleaned_response.get("generated_code"),
             current_stage=stage,
-            gathering_requirements_estimated_progress=assistant_response.get(
+            gathering_requirements_estimated_progress=cleaned_response.get(
                 "gathering_requirements_estimated_progress", 0.0
             )
         )
+
+    def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean response data to remove field names with leading underscores that Pydantic v2 doesn't allow."""
+        if not isinstance(data, dict):
+            return data
+        
+        cleaned = {}
+        for key, value in data.items():
+            # Skip fields that start with double underscores
+            if key.startswith('__'):
+                logger.warning(f"Skipping field with leading underscores: {key}")
+                continue
+            
+            # Recursively clean nested dictionaries
+            if isinstance(value, dict):
+                cleaned[key] = self._clean_response_data(value)
+            elif isinstance(value, list):
+                cleaned[key] = [self._clean_response_data(item) if isinstance(item, dict) else item for item in value]
+            else:
+                cleaned[key] = value
+        
+        return cleaned
     
     def _create_error_response(
         self, 

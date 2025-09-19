@@ -46,7 +46,7 @@ class ProjectContext(BaseModel):
     # Keep device_constants flexible and JSON-serializable for backwards compatibility with tests
     device_constants: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Device specifications with origin tracking. Keys are device names, values are dicts or DeviceEntry-like structures."
+        description="Device specifications with origin tracking. Keys are device names, values are dicts or DeviceEntry-like structures. Supports hierarchical/nested structure using dot notation (e.g., 'Device1.name' = 'VS-C1500CX', 'Device1.power.voltage' = '24V')."
     )
     information: str = Field(
         default="",
