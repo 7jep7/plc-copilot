@@ -90,42 +90,42 @@ class SimplifiedContextService:
                 return await self._handle_context_update_case(request, session_id)
             else:
                 # Case 1: Project kickoff
-                return await self._handle_project_kickoff_case(request, session_id)
+                return await self._handle_project_kickoff_case(request, session_id, uploaded_files)
                 
         except Exception as e:
             logger.error(f"Error processing context update: {e}")
             return self._create_error_response(str(e), request, session_id or "error-session")
     
     async def _handle_project_kickoff_case(
-        self, 
-        request: ContextUpdateRequest, 
-        session_id: str
+        self,
+        request: ContextUpdateRequest,
+        session_id: str,
+        uploaded_files: Optional[List[Any]] = None
     ) -> ContextUpdateResponse:
         """Handle Case 1: Project kickoff with no context or files."""
-        
         logger.info("Handling project kickoff case")
-        
+
         # Check if this is an off-topic start 
         # Only consider off-topic if: no files AND (single word OR common greeting)
         # MCQ responses are always considered on-topic
         user_message = request.message or ""
         has_mcq_response = bool(request.mcq_responses)
-        has_files = bool(request.files and len(request.files) > 0)
-        
+        has_files = bool(uploaded_files and len(uploaded_files) > 0)
+
         if not has_mcq_response and not has_files and not self._is_plc_related(user_message):
             # Offer sample projects via MCQ
             return self._create_sample_projects_response(session_id)
-        
+
         # Build message with MCQ responses if available
         complete_message = self._build_user_message_with_mcq(request)
-        
+
         # Start gathering requirements with assistant
         assistant_response = await self.assistant_service.process_message(
             user_message=complete_message,
             current_context=None,
             file_ids=None
         )
-        
+
         return self._convert_assistant_to_context_response(
             assistant_response, session_id, Stage.GATHERING_REQUIREMENTS
         )
