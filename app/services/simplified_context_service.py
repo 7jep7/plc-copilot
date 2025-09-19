@@ -105,11 +105,14 @@ class SimplifiedContextService:
         
         logger.info("Handling project kickoff case")
         
-        # Check if this is an off-topic start (but MCQ responses are always considered on-topic)
+        # Check if this is an off-topic start 
+        # Only consider off-topic if: no files AND (single word OR common greeting)
+        # MCQ responses are always considered on-topic
         user_message = request.message or ""
         has_mcq_response = bool(request.mcq_responses)
+        has_files = bool(request.files and len(request.files) > 0)
         
-        if not has_mcq_response and not self._is_plc_related(user_message):
+        if not has_mcq_response and not has_files and not self._is_plc_related(user_message):
             # Offer sample projects via MCQ
             return self._create_sample_projects_response(session_id)
         
@@ -391,51 +394,75 @@ class SimplifiedContextService:
             return "Unable to extract device specifications from uploaded files."
 
     def _is_plc_related(self, message: str) -> bool:
-        """Check if the message is related to PLC programming."""
-        plc_keywords = [
-            # Core PLC terms
-            "plc", "programmable logic", "structured text", "ladder logic",
-            "automation", "industrial automation", "industrial control", "control system",
-            "scada", "hmi", "process control", "safety interlock", "safety system",
-            "motor control", "sensor", "actuator", "conveyor", "interlock", 
-            "tag", "variable", "function block",
-            
-            # Manufacturing & Production
-            "assembly line", "manufacturing", "factory automation", "production line",
-            "robotic", "packaging line", "rfid tracking", "manufacturing process",
-            "machine tool", "cnc", "metal cutting", "welding line", 
-            "injection molding", "steel mill", "rolling process",
-            
-            # Building & Infrastructure Systems
-            "hvac", "building management", "warehouse automation", "storage system", 
-            "automated storage", "power distribution", "load management", 
-            "elevator control", "baggage handling system",
-            
-            # Energy & Utilities
-            "solar panel tracking", "solar panel control", "wind turbine control", 
-            "power plant", "energy management system", "water treatment", 
-            "pump station", "boiler control", "steam management",
-            
-            # Specialized Industries
-            "semiconductor", "cleanroom management", "hospital system", 
-            "patient bed management", "airport system", "baggage handling",
-            "fish farm", "water quality management", "pharmaceutical",
-            "food processing", "chemical reactor", "process safety",
-            
-            # General Industrial Terms (more specific)
-            "management system", "environmental control system", "climate control system",
-            "temperature control", "pressure control", "monitoring system",
-            "distribution system", "crane control", "hoist control", "textile loom",
-            "brewery fermentation", "mining conveyor", "paper mill", "automotive paint",
-            "glass manufacturing", "oil refinery", "greenhouse control", 
-            "irrigation system", "equipment monitoring", "factory equipment",
-            
-            # Additional essential terms
-            "automate my factory", "factory", "plant", "industrial equipment"
+        """
+        Check if the message should be considered off-topic.
+        
+        Returns False (off-topic) only if the message is:
+        1) A single word, OR
+        2) A common greeting/small talk phrase
+        
+        This makes the filter very restrictive - almost all messages are considered on-topic
+        unless they're clearly just greetings or single words.
+        """
+        message_stripped = message.strip()
+        message_lower = message_stripped.lower()
+        
+        # Check if it's a single word (no spaces)
+        if ' ' not in message_stripped and len(message_stripped) > 0:
+            return False  # Single word = off-topic
+        
+        # Common greeting/small talk phrases that should be considered off-topic
+        off_topic_phrases = [
+            "how are you",
+            "how are you?",
+            "how is it going",
+            "how is it going?",
+            "what's up",
+            "what's up?",
+            "whats up",
+            "whats up?",
+            "how's it going",
+            "how's it going?",
+            "hows it going",
+            "hows it going?",
+            "good morning",
+            "good afternoon", 
+            "good evening",
+            "good night",
+            "hello there",
+            "hi there",
+            "hey there",
+            "how do you do",
+            "how do you do?",
+            "nice to meet you",
+            "pleased to meet you",
+            "how have you been",
+            "how have you been?",
+            "long time no see",
+            "what's new",
+            "what's new?",
+            "whats new",
+            "whats new?",
+            "how's everything",
+            "how's everything?",
+            "hows everything",
+            "hows everything?",
+            "how are things",
+            "how are things?",
+            ".",
+            "?",
+            "!",
+            "...",
+            "test",
+            "testing",
         ]
         
-        message_lower = message.lower()
-        return any(keyword in message_lower for keyword in plc_keywords)
+        # Check if the message exactly matches any off-topic phrase
+        if message_lower in off_topic_phrases:
+            return False  # Common greeting/small talk = off-topic
+        
+        # Everything else is considered on-topic (PLC-related)
+        return True
     
     def _create_sample_projects_response(self, session_id: str) -> ContextUpdateResponse:
         """Create response with sample project options (randomly selected from 40 projects)."""
