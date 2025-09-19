@@ -104,8 +104,28 @@ async def update_context(
             for file in files:
                 if file.filename and file.size and file.size > 0:
                     content = await file.read()
-                    file_data_list.append(BytesIO(content))
-                    logger.info(f"Processing uploaded file: {file.filename} ({file.size} bytes)")
+                    logger.info(f"Processing uploaded file: {file.filename}")
+                    logger.info(f"  - Reported file size: {file.size} bytes")
+                    logger.info(f"  - Read content length: {len(content)} bytes")
+                    logger.info(f"  - Size match: {'✅' if len(content) == file.size else '❌ MISMATCH!'}")
+                    
+                    if len(content) != file.size:
+                        logger.error(f"FILE SIZE MISMATCH: Expected {file.size} bytes, got {len(content)} bytes")
+                    
+                    # Create BytesIO and verify it has content
+                    bytes_io = BytesIO(content)
+                    bytes_io.seek(0, 2)  # Seek to end
+                    size_check = bytes_io.tell()
+                    bytes_io.seek(0)  # Reset to beginning
+                    
+                    logger.info(f"  - BytesIO created with {size_check} bytes for {file.filename}")
+                    
+                    if size_check == 0:
+                        logger.error(f"EMPTY BYTESIO: {file.filename} resulted in empty BytesIO object")
+                    elif size_check < 1000:  # Less than 1KB is suspicious for a PDF
+                        logger.warning(f"SMALL FILE WARNING: {file.filename} is only {size_check} bytes")
+                        
+                    file_data_list.append(bytes_io)
         
         # Process context update with simplified service
         context_service = get_context_service()
