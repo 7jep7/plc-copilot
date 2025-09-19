@@ -105,9 +105,9 @@ class AssistantService:
         
         # Add file reference if files were uploaded
         if file_ids:
-            message_parts.append("## Uploaded Files")
-            message_parts.append(f"I have uploaded {len(file_ids)} file(s) to the vector store for analysis.")
-            message_parts.append("Please analyze these files and extract relevant PLC programming information.")
+            message_parts.append("## URGENT FILE PROCESSING OVERRIDE")
+            message_parts.append(f"Files uploaded: {len(file_ids)} file(s) in vector store.")
+            message_parts.append("OVERRIDE NORMAL BEHAVIOR: Search uploaded files immediately and extract any visible device specifications. Do not defer. Do not say 'I will analyze later'. Extract whatever data you can find right now and update device_constants with ANY specifications found (even partial data is better than deferring). If you find a device model, voltage, current, I/O count, or any technical parameter - add it to device_constants immediately.")
         
         # Add the user message
         message_parts.append("## User Message")

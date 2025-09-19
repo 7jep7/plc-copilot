@@ -9,12 +9,13 @@ PLC Copilot simplifies industrial automation programming by providing intelligen
 ## ✨ Key Features
 
 - **🤖 AI-Powered PLC Programming**: Intelligent code generation and technical guidance
-- **📁 Document Analysis**: Upload and analyze technical specifications, datasheets, and manuals
+- **📁 Smart Document Analysis**: Upload PDFs and get immediate device constant extraction
+- **⚡ Dual Processing Modes**: Vector store for complex queries OR direct extraction for immediate results
 - **💬 Interactive Requirements Gathering**: Smart questionnaires and conversation flow
 - **🔄 Session Management**: Frontend-controlled session lifecycle with automatic cleanup
 - **📊 Multiple Choice Questions**: Dynamic MCQ generation for requirement clarification
 - **🎯 Progress Tracking**: Real-time progress estimation for requirements gathering
-- **🏗️ Modern Architecture**: Built on OpenAI Assistant API with vector store integration
+- **🏗️ Modern Architecture**: Built on OpenAI Assistant API with flexible file processing
 
 ## 🏛️ Architecture
 
@@ -100,6 +101,9 @@ Create a `.env` file with the following variables:
 OPENAI_API_KEY=your-openai-api-key-here
 OPENAI_ASSISTANT_ID=your-assistant-id-here
 OPENAI_VECTOR_STORE_ID=your-vector-store-id-here
+
+# File Processing Configuration
+USE_VECTOR_STORE=false  # Set to true to use OpenAI vector store, false for direct content extraction
 
 # Database (SQLite for development)
 DATABASE_URL=sqlite:///./plc_copilot.db
@@ -203,8 +207,69 @@ The system handles three main interaction patterns:
 
 3. **File Upload** (Files + optional context)
    - User uploads technical documents
-   - Files are processed and stored in vector store
+   - Files are processed via vector store OR direct extraction
    - Assistant uses document context for responses
+
+## 📄 File Processing Modes
+
+The system supports two file processing modes controlled by the `USE_VECTOR_STORE` configuration:
+
+### Vector Store Mode (USE_VECTOR_STORE=true)
+- **Best for**: Large document collections, complex multi-document queries
+- **Process**: Files uploaded to OpenAI vector store → Assistant searches when needed
+- **Pros**: Scalable, handles large documents, persistent storage
+- **Cons**: May defer analysis, requires vector store setup
+
+### Direct Extraction Mode (USE_VECTOR_STORE=false) ⭐ **Recommended**
+- **Best for**: Immediate device constant extraction, fast response times
+- **Process**: PDF text extracted → Key specifications parsed → Passed directly to assistant
+- **Pros**: Immediate analysis, no deferred responses, token-optimized
+- **Cons**: Limited by prompt token limits
+
+#### Direct Extraction Features
+
+When `USE_VECTOR_STORE=false`, the system:
+
+1. **Extracts PDF text** using pdfplumber with table detection
+2. **Categorizes technical specifications** into organized sections:
+   - Basic Info (model, series, type)
+   - Power & Environment (voltage, current, temperature, humidity)
+   - Performance (CPU memory, program capacity, instruction speed)
+   - I/O & Communication (max I/O points, max units)
+   - Programming (languages, instruction sets, commands)
+   - Physical (weight, dimensions, mounting)
+3. **Optimizes content** to stay within token limits (~2000 tokens)
+4. **Passes directly** to assistant for immediate device constant extraction
+
+Example extracted specifications:
+```
+# Device Technical Specifications
+
+## Basic Info:
+- Model: KV-8000A
+- Series: KV-8000/7000
+
+## Power & Environment:
+- Power Voltage: 24 VDC (±10%)
+- Current Consumption: 400 mA or less
+- Operating Temperature: 0 to +50°C (32 to 122°F)
+
+## Performance:
+- CPU Memory: 64 MB
+- Program Capacity: Approx. 1500 k steps
+- Instruction Speed: Min. 0.96 ns
+
+## I/O & Communication:
+- Max I/O Points: 3072 points for expansion
+- Max Units: 16 units (expansion)
+
+## Programming:
+- Programming Language: Expanded ladder, KV Script, mnemonic
+- Instructions: 80 classes, 181 instructions
+
+## Physical:
+- Weight: Approx. 340 g
+```
 
 ### Session Lifecycle
 
@@ -383,7 +448,68 @@ DATABASE_URL=sqlite:///./plc_copilot.db
 DATABASE_URL=postgresql://user:password@localhost/plc_copilot
 ```
 
-## 📊 Monitoring & Analytics
+## �️ Troubleshooting
+
+### Common Issues
+
+#### "Request too large for gpt-4" Token Limit Error
+**Problem**: File content exceeds OpenAI token limits when using vector store mode.
+
+**Solution**: Switch to direct extraction mode:
+```bash
+# In .env file
+USE_VECTOR_STORE=false
+```
+
+This enables intelligent content extraction that:
+- Parses only key technical specifications
+- Stays within token limits (~2000 tokens vs 30,000 limit)
+- Provides immediate device constant extraction
+- Avoids deferred analysis responses
+
+#### Assistant Defers File Analysis
+**Problem**: Assistant responds with "I will analyze..." instead of immediate extraction.
+
+**Root Cause**: OpenAI Assistant API may defer complex file analysis by design.
+
+**Solution**: Use direct extraction mode (`USE_VECTOR_STORE=false`) which bypasses this behavior.
+
+#### PDF Text Extraction Fails
+**Problem**: PDF files contain no extractable text or complex layouts.
+
+**Troubleshooting**:
+1. Check if PDF has text layers (not scanned images)
+2. Try OCR preprocessing for scanned PDFs
+3. Convert to text format before upload
+4. Check logs for specific extraction errors
+
+#### Session Cleanup Issues
+**Problem**: Uploaded files not properly cleaned up.
+
+**Solution**:
+```bash
+# Manual cleanup via API
+curl -X POST http://localhost:8000/api/v1/context/cleanup \
+  -H "Content-Type: application/json" \
+  -d '{"session_ids": ["your-session-id"]}'
+
+# Check session stats
+curl http://localhost:8000/api/v1/context/sessions/stats
+```
+
+### Performance Optimization
+
+#### For Large Documents
+- Use vector store mode for documents > 10 pages
+- Enable `USE_VECTOR_STORE=true` for complex multi-document queries
+- Consider document preprocessing to extract key sections
+
+#### For Fast Response Times
+- Use direct extraction mode (`USE_VECTOR_STORE=false`)
+- Upload single-page specification sheets
+- Use concise, well-structured technical documents
+
+## �📊 Monitoring & Analytics
 
 ### Session Statistics
 

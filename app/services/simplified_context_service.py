@@ -177,16 +177,21 @@ class SimplifiedContextService:
         # Generate filenames for uploaded files
         filenames = [f"uploaded_file_{i+1}.pdf" for i in range(len(uploaded_files))]
         
-        # Upload files to OpenAI vector store
-        file_metadata = await self.vector_store_service.upload_files_to_vector_store(
-            uploaded_files, filenames, session_id
-        )
+        file_metadata = []
+        file_ids = []
         
-        # Track uploaded file IDs for this session
-        file_ids = [meta["file_id"] for meta in file_metadata if "file_id" in meta]
-        if session_id not in self._active_sessions:
-            self._active_sessions[session_id] = []
-        self._active_sessions[session_id].extend(file_ids)
+        # Only upload to vector store if enabled
+        if settings.USE_VECTOR_STORE:
+            # Upload files to OpenAI vector store
+            file_metadata = await self.vector_store_service.upload_files_to_vector_store(
+                uploaded_files, filenames, session_id
+            )
+            
+            # Track uploaded file IDs for this session
+            file_ids = [meta["file_id"] for meta in file_metadata if "file_id" in meta]
+            if session_id not in self._active_sessions:
+                self._active_sessions[session_id] = []
+            self._active_sessions[session_id].extend(file_ids)
         
         # Build user message
         user_message = request.message or f"I've uploaded {len(uploaded_files)} file(s) for analysis."
@@ -200,7 +205,14 @@ class SimplifiedContextService:
                 "information": request.current_context.information or ""
             }
         
-        # Process with assistant (it will automatically search vector store for uploaded files)
+        # If vector store is disabled, pass summarized file content directly
+        if not settings.USE_VECTOR_STORE and uploaded_files:
+            # Extract key specifications from file content instead of passing entire document
+            extracted_specs = await self._extract_key_specifications_from_files(uploaded_files, filenames)
+            if extracted_specs:
+                user_message = f"Based on the following device specifications, extract device constants and technical details:\n\n{extracted_specs}\n\nUser request: {user_message}"
+            file_ids = None
+        # Process with assistant
         assistant_response = await self.assistant_service.process_message(
             user_message=user_message,
             current_context=current_context,
@@ -223,7 +235,161 @@ class SimplifiedContextService:
         return self._convert_assistant_to_context_response(
             assistant_response, session_id, new_stage
         )
-    
+
+    async def _extract_key_specifications_from_files(self, uploaded_files: List[BytesIO], filenames: List[str]) -> str:
+        """Extract comprehensive technical specifications from uploaded files while staying below token limits."""
+        try:
+            # Import PDF extractor
+            from app.services.pdf_extractor import PDFTextExtractor
+            from pathlib import Path
+            
+            pdf_extractor = PDFTextExtractor()
+            all_text = ""
+            
+            # Extract text from each file
+            for file_content, filename in zip(uploaded_files, filenames):
+                file_extension = Path(filename).suffix.lower()
+                
+                if file_extension == '.pdf' and pdf_extractor:
+                    # Extract text using the same method as vector store service
+                    file_content.seek(0)
+                    try:
+                        extracted_data = pdf_extractor.extract_text_from_pdf(file_content, filename)
+                        if extracted_data and extracted_data.get('text'):
+                            all_text += extracted_data['text'] + "\n\n"
+                        else:
+                            logger.warning(f"No text extracted from PDF {filename}")
+                    except Exception as e:
+                        logger.error(f"PDF extraction failed for {filename}: {e}")
+                else:
+                    # Handle text files
+                    file_content.seek(0)
+                    content = file_content.read().decode('utf-8', errors='replace')
+                    all_text += content + "\n\n"
+            
+            if not all_text.strip():
+                return ""
+            
+            # Extract comprehensive technical sections using smart patterns
+            import re
+            
+            # Categorized patterns for better organization
+            device_patterns = {
+                'Basic Info': {
+                    'Model': r'(?i)model\s*[:\-]?\s*([A-Z0-9\-\.]+)',
+                    'Series': r'(?i)(?:series|family)[:\-]?\s*([A-Z0-9\-\s]+)',
+                    'Type': r'(?i)(?:controller|plc|device)\s+type[:\-]?\s*([^;\n]+)',
+                },
+                'Power & Environment': {
+                    'Power Voltage': r'(?i)power\s+voltage[:\-]?\s*([^;\n]+)',
+                    'Current Consumption': r'(?i)current\s+consumption[:\-]?\s*([^;\n]+)',
+                    'Operating Temperature': r'(?i)operating\s+(?:ambient\s+)?temperature[:\-]?\s*([^;\n]+)',
+                    'Operating Humidity': r'(?i)operating\s+(?:ambient\s+)?humidity[:\-]?\s*([^;\n]+)',
+                    'Storage Temperature': r'(?i)storage\s+(?:ambient\s+)?temperature[:\-]?\s*([^;\n]+)',
+                },
+                'Performance': {
+                    'CPU Memory': r'(?i)cpu\s+memory\s*(?:capacity)?[:\-]?\s*([^;\n]+)',
+                    'Program Capacity': r'(?i)program\s+capacity[:\-]?\s*([^;\n]+)',
+                    'Instruction Speed': r'(?i)instruction\s+execution\s+speed[:\-]?\s*([^;\n]+)',
+                    'Processing Mode': r'(?i)(?:arithmetic\s+)?control\s+mode[:\-]?\s*([^;\n]+)',
+                },
+                'I/O & Communication': {
+                    'Max I/O Points': r'(?i)maximum.*i/?o\s+points[:\-]?\s*([^;\n]+)',
+                    'Max Units': r'(?i)maximum\s+number\s+of\s+units[:\-]?\s*([^;\n]+)',
+                    'Communication': r'(?i)communication[:\-]?\s*([^;\n]+)',
+                },
+                'Programming': {
+                    'Programming Language': r'(?i)program(?:ming)?\s+language[:\-]?\s*([^;\n]+)',
+                    'Instructions': r'(?i)(?:number\s+of\s+)?(?:basic\s+)?instructions[:\-]?\s*([^;\n]+)',
+                    'Commands': r'(?i)(?:number\s+of\s+)?commands[:\-]?\s*([^;\n]+)',
+                },
+                'Physical': {
+                    'Weight': r'(?i)weight[:\-]?\s*([^;\n]+)',
+                    'Dimensions': r'(?i)dimensions?[:\-]?\s*([^;\n]+)',
+                    'Mounting': r'(?i)mounting[:\-]?\s*([^;\n]+)',
+                }
+            }
+            
+            extracted_info = {}
+            
+            # Extract specifications by category
+            for category, patterns in device_patterns.items():
+                category_specs = {}
+                for spec_name, pattern in patterns.items():
+                    matches = re.findall(pattern, all_text, re.MULTILINE | re.DOTALL)
+                    if matches:
+                        # Clean up the matched text
+                        clean_match = matches[0].strip()
+                        # Remove excessive whitespace and limit length per field
+                        clean_match = re.sub(r'\s+', ' ', clean_match)[:300]
+                        if clean_match and len(clean_match) > 3:  # Avoid very short matches
+                            category_specs[spec_name] = clean_match
+                
+                if category_specs:
+                    extracted_info[category] = category_specs
+            
+            # Also extract any tables or structured data sections
+            table_patterns = [
+                r'(?i)specifications?\s*:?\s*\n((?:[^\n]*\n){1,15})',
+                r'(?i)technical\s+data\s*:?\s*\n((?:[^\n]*\n){1,15})',
+                r'(?i)performance\s+specifications?\s*:?\s*\n((?:[^\n]*\n){1,15})',
+            ]
+            
+            for pattern in table_patterns:
+                matches = re.findall(pattern, all_text, re.MULTILINE | re.DOTALL)
+                if matches:
+                    table_content = matches[0].strip()[:500]  # Limit table content
+                    if 'Tables/Data' not in extracted_info:
+                        extracted_info['Tables/Data'] = {}
+                    extracted_info['Tables/Data'][f'Table_{len(extracted_info["Tables/Data"])+1}'] = table_content
+            
+            # Format the comprehensive output
+            if extracted_info:
+                output_lines = []
+                total_chars = 0
+                max_chars = 8000  # Stay well below token limit (~2000 tokens)
+                
+                for category, specs in extracted_info.items():
+                    category_section = f"\n## {category}:\n"
+                    if total_chars + len(category_section) > max_chars:
+                        break
+                    output_lines.append(category_section)
+                    total_chars += len(category_section)
+                    
+                    for spec_name, value in specs.items():
+                        spec_line = f"- {spec_name}: {value}\n"
+                        if total_chars + len(spec_line) > max_chars:
+                            break
+                        output_lines.append(spec_line)
+                        total_chars += len(spec_line)
+                
+                result = "# Device Technical Specifications\n" + "".join(output_lines)
+                logger.info(f"Extracted {total_chars} characters of technical specifications")
+                return result
+            
+            # Fallback: extract key sections of original text
+            sections = all_text.split('\n\n')
+            important_sections = []
+            total_chars = 0
+            max_chars = 6000
+            
+            for section in sections:
+                if any(keyword in section.lower() for keyword in 
+                      ['specification', 'performance', 'technical', 'model', 'memory', 'voltage', 'temperature']):
+                    if total_chars + len(section) < max_chars:
+                        important_sections.append(section.strip())
+                        total_chars += len(section)
+            
+            if important_sections:
+                return "# Device Information\n\n" + "\n\n".join(important_sections)
+            
+            # Last resort: first portion of text
+            return f"# Device Information\n\n{all_text[:4000]}..."
+            
+        except Exception as e:
+            logger.error(f"Error extracting specifications: {e}")
+            return "Unable to extract device specifications from uploaded files."
+
     def _is_plc_related(self, message: str) -> bool:
         """Check if the message is related to PLC programming."""
         plc_keywords = [
