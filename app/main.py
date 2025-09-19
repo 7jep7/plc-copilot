@@ -36,15 +36,14 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# CORS middleware
-if settings.BACKEND_CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS middleware - Temporarily allow all origins for debugging
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for debugging
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Trusted host middleware - Allow all hosts for now to debug
 app.add_middleware(

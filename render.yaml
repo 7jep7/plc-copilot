@@ -27,7 +27,7 @@ services:
       - key: PROJECT_NAME
         value: "PLC Copilot"
       - key: BACKEND_CORS_ORIGINS
-        value: "https://jonaspetersen.com,https://www.jonaspetersen.com"
+        value: "https://jonaspetersen.com,https://www.jonaspetersen.com,http://localhost:3000,https://localhost:3000,http://localhost:3001,https://localhost:3001"
       - key: MAX_FILE_SIZE
         value: "10485760"
       - key: ALLOWED_FILE_TYPES
