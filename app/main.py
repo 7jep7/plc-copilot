@@ -46,10 +46,10 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-# Trusted host middleware
+# Trusted host middleware - Allow all hosts for now to debug
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"] if settings.DEBUG else ["jonaspetersen.com", "*.render.com"]
+    allowed_hosts=["*"]
 )
 
 # Include API router
