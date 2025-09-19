@@ -20,6 +20,12 @@ except ImportError:
 
 from app.core.config import settings
 
+try:
+    from app.services.pdf_extractor import PDFTextExtractor
+    PDF_EXTRACTION_AVAILABLE = True
+except ImportError:
+    PDF_EXTRACTION_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +36,13 @@ class VectorStoreService:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY) if OPENAI_AVAILABLE else None
         self.vector_store_id = settings.OPENAI_VECTOR_STORE_ID
         self._session_files: Dict[str, List[str]] = {}  # Track uploaded file IDs per session
+        
+        # Initialize PDF extractor if available
+        self.pdf_extractor = PDFTextExtractor() if PDF_EXTRACTION_AVAILABLE else None
+        if self.pdf_extractor:
+            logger.info("PDF text extraction enabled")
+        else:
+            logger.warning("PDF text extraction not available - PDFs will be uploaded as-is")
     
     async def upload_files_to_vector_store(
         self, 
@@ -60,6 +73,16 @@ class VectorStoreService:
             file_ids = []
             
             for file_content, filename in zip(uploaded_files, filenames):
+                # Debug: Check BytesIO state before processing
+                file_content.seek(0, 2)
+                size_before = file_content.tell()
+                file_content.seek(0)
+                logger.info(f"Processing file {filename}: BytesIO size = {size_before} bytes")
+                
+                if size_before == 0:
+                    logger.warning(f"Skipping empty file: {filename}")
+                    continue
+                
                 try:
                     # Save file temporarily for upload
                     file_metadata = await self._upload_single_file(file_content, filename)
@@ -87,13 +110,115 @@ class VectorStoreService:
     async def _upload_single_file(self, file_content: BytesIO, filename: str) -> Optional[Dict[str, Any]]:
         """Upload a single file to the OpenAI vector store."""
         
+        # Debug: Check file content size before processing
+        file_content.seek(0, 2)  # Seek to end to get size
+        file_size = file_content.tell()
+        file_content.seek(0)  # Reset to beginning
+        
+        logger.info(f"Processing file: {filename}, size: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.error(f"File {filename} is empty (0 bytes) - cannot upload to vector store")
+            return None
+        
+        # Check if this is a PDF file that needs text extraction
+        file_extension = Path(filename).suffix.lower()
+        is_pdf = file_extension == '.pdf'
+        
+        if is_pdf and self.pdf_extractor:
+            logger.info(f"Extracting text from PDF: {filename}")
+            try:
+                # Extract text from PDF
+                extracted_data = self.pdf_extractor.extract_text_from_pdf(file_content, filename)
+                
+                if extracted_data and extracted_data.get('text'):
+                    # Create text file content from extracted data
+                    text_content = self.pdf_extractor.create_text_file_content(extracted_data, filename)
+                    
+                    # Convert to bytes for upload
+                    text_bytes = text_content.encode('utf-8')
+                    logger.info(f"Converted PDF to text: {len(text_bytes)} bytes")
+                    
+                    # Upload as text file instead of PDF
+                    text_filename = filename.replace('.pdf', '_extracted.txt')
+                    return await self._upload_text_content(text_bytes, text_filename)
+                else:
+                    logger.warning(f"No text extracted from PDF {filename}, uploading as-is")
+            except Exception as e:
+                logger.error(f"PDF text extraction failed for {filename}: {e}")
+                logger.info("Falling back to direct PDF upload")
+        
+        # Upload file as-is (original logic)
+        return await self._upload_raw_file(file_content, filename)
+    
+    async def _upload_text_content(self, text_bytes: bytes, filename: str) -> Optional[Dict[str, Any]]:
+        """Upload text content to vector store."""
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.txt') as tmp_file:
+            try:
+                tmp_file.write(text_bytes)
+                tmp_file.flush()
+                
+                # Verify the temporary file has content
+                tmp_file_size = os.path.getsize(tmp_file.name)
+                logger.info(f"Text file {tmp_file.name} created with {tmp_file_size} bytes")
+                
+                if tmp_file_size == 0:
+                    logger.error(f"Text file is empty after writing content for {filename}")
+                    return None
+                
+                # Upload to OpenAI
+                with open(tmp_file.name, 'rb') as f:
+                    file_object = self.client.files.create(
+                        file=f,
+                        purpose="assistants"
+                    )
+                
+                # Add to vector store
+                vector_store_file_id = None
+                try:
+                    vector_store_file = self.client.vector_stores.files.create(
+                        vector_store_id=self.vector_store_id,
+                        file_id=file_object.id
+                    )
+                    vector_store_file_id = vector_store_file.id
+                except Exception as e:
+                    logger.warning(f"Could not add text file to vector store: {e}")
+                
+                return {
+                    "file_id": file_object.id,
+                    "vector_store_file_id": vector_store_file_id,
+                    "filename": filename,
+                    "bytes": file_object.bytes,
+                    "status": "uploaded",
+                    "type": "extracted_text"
+                }
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(tmp_file.name)
+                except Exception:
+                    pass
+    
+    async def _upload_raw_file(self, file_content: BytesIO, filename: str) -> Optional[Dict[str, Any]]:
+        """Upload raw file content to vector store (original logic)."""
         # Create temporary file for upload
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
             try:
                 # Write content to temporary file
-                file_content.seek(0)
-                tmp_file.write(file_content.read())
+                content_data = file_content.read()
+                logger.info(f"Read {len(content_data)} bytes from BytesIO for {filename}")
+                
+                tmp_file.write(content_data)
                 tmp_file.flush()
+                
+                # Verify the temporary file has content
+                tmp_file_size = os.path.getsize(tmp_file.name)
+                logger.info(f"Temporary file {tmp_file.name} created with {tmp_file_size} bytes")
+                
+                if tmp_file_size == 0:
+                    logger.error(f"Temporary file is empty after writing content for {filename}")
+                    return None
                 
                 # Upload to OpenAI
                 with open(tmp_file.name, 'rb') as f:
@@ -105,7 +230,7 @@ class VectorStoreService:
                 # Try to add file to vector store (if API is available)
                 vector_store_file_id = None
                 try:
-                    vector_store_file = self.client.beta.vector_stores.files.create(
+                    vector_store_file = self.client.vector_stores.files.create(
                         vector_store_id=self.vector_store_id,
                         file_id=file_object.id
                     )
@@ -148,7 +273,7 @@ class VectorStoreService:
             for file_id in file_ids:
                 try:
                     # Remove from vector store first
-                    self.client.beta.vector_stores.files.delete(
+                    self.client.vector_stores.files.delete(
                         vector_store_id=self.vector_store_id,
                         file_id=file_id
                     )
@@ -175,7 +300,7 @@ class VectorStoreService:
         
         try:
             # Try to access vector store - check if it exists
-            vector_store = self.client.beta.vector_stores.retrieve(self.vector_store_id)
+            vector_store = self.client.vector_stores.retrieve(self.vector_store_id)
             return {
                 "id": vector_store.id,
                 "name": getattr(vector_store, 'name', 'N/A'),
