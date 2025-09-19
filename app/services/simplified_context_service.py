@@ -90,39 +90,42 @@ class SimplifiedContextService:
                 return await self._handle_context_update_case(request, session_id)
             else:
                 # Case 1: Project kickoff
-                return await self._handle_project_kickoff_case(request, session_id)
+                return await self._handle_project_kickoff_case(request, session_id, uploaded_files)
                 
         except Exception as e:
             logger.error(f"Error processing context update: {e}")
             return self._create_error_response(str(e), request, session_id or "error-session")
     
     async def _handle_project_kickoff_case(
-        self, 
-        request: ContextUpdateRequest, 
-        session_id: str
+        self,
+        request: ContextUpdateRequest,
+        session_id: str,
+        uploaded_files: Optional[List[Any]] = None
     ) -> ContextUpdateResponse:
         """Handle Case 1: Project kickoff with no context or files."""
-        
         logger.info("Handling project kickoff case")
-        
-        # Check if this is an off-topic start (but MCQ responses are always considered on-topic)
+
+        # Check if this is an off-topic start 
+        # Only consider off-topic if: no files AND (single word OR common greeting)
+        # MCQ responses are always considered on-topic
         user_message = request.message or ""
         has_mcq_response = bool(request.mcq_responses)
-        
-        if not has_mcq_response and not self._is_plc_related(user_message):
+        has_files = bool(uploaded_files and len(uploaded_files) > 0)
+
+        if not has_mcq_response and not has_files and not self._is_plc_related(user_message):
             # Offer sample projects via MCQ
             return self._create_sample_projects_response(session_id)
-        
+
         # Build message with MCQ responses if available
         complete_message = self._build_user_message_with_mcq(request)
-        
+
         # Start gathering requirements with assistant
         assistant_response = await self.assistant_service.process_message(
             user_message=complete_message,
             current_context=None,
             file_ids=None
         )
-        
+
         return self._convert_assistant_to_context_response(
             assistant_response, session_id, Stage.GATHERING_REQUIREMENTS
         )
@@ -321,7 +324,7 @@ class SimplifiedContextService:
                         # Clean up the matched text
                         clean_match = matches[0].strip()
                         # Remove excessive whitespace and limit length per field
-                        clean_match = re.sub(r'\s+', ' ', clean_match)[:300]
+                        clean_match = re.sub(r'\s+', ' ', clean_match)[:900]
                         if clean_match and len(clean_match) > 3:  # Avoid very short matches
                             category_specs[spec_name] = clean_match
                 
@@ -338,7 +341,7 @@ class SimplifiedContextService:
             for pattern in table_patterns:
                 matches = re.findall(pattern, all_text, re.MULTILINE | re.DOTALL)
                 if matches:
-                    table_content = matches[0].strip()[:500]  # Limit table content
+                    table_content = matches[0].strip()[:1500]  # Limit table content
                     if 'Tables/Data' not in extracted_info:
                         extracted_info['Tables/Data'] = {}
                     extracted_info['Tables/Data'][f'Table_{len(extracted_info["Tables/Data"])+1}'] = table_content
@@ -347,7 +350,7 @@ class SimplifiedContextService:
             if extracted_info:
                 output_lines = []
                 total_chars = 0
-                max_chars = 8000  # Stay well below token limit (~2000 tokens)
+                max_chars = 24000  # Increased to allow more content (~6000 tokens)
                 
                 for category, specs in extracted_info.items():
                     category_section = f"\n## {category}:\n"
@@ -365,13 +368,14 @@ class SimplifiedContextService:
                 
                 result = "# Device Technical Specifications\n" + "".join(output_lines)
                 logger.info(f"Extracted {total_chars} characters of technical specifications")
+                # logger.info(f"Full extracted technical text (all_text):\n{all_text}")
                 return result
             
             # Fallback: extract key sections of original text
             sections = all_text.split('\n\n')
             important_sections = []
             total_chars = 0
-            max_chars = 6000
+            max_chars = 18000
             
             for section in sections:
                 if any(keyword in section.lower() for keyword in 
@@ -384,58 +388,82 @@ class SimplifiedContextService:
                 return "# Device Information\n\n" + "\n\n".join(important_sections)
             
             # Last resort: first portion of text
-            return f"# Device Information\n\n{all_text[:4000]}..."
+            return f"# Device Information\n\n{all_text[:12000]}..."
             
         except Exception as e:
             logger.error(f"Error extracting specifications: {e}")
             return "Unable to extract device specifications from uploaded files."
 
     def _is_plc_related(self, message: str) -> bool:
-        """Check if the message is related to PLC programming."""
-        plc_keywords = [
-            # Core PLC terms
-            "plc", "programmable logic", "structured text", "ladder logic",
-            "automation", "industrial automation", "industrial control", "control system",
-            "scada", "hmi", "process control", "safety interlock", "safety system",
-            "motor control", "sensor", "actuator", "conveyor", "interlock", 
-            "tag", "variable", "function block",
-            
-            # Manufacturing & Production
-            "assembly line", "manufacturing", "factory automation", "production line",
-            "robotic", "packaging line", "rfid tracking", "manufacturing process",
-            "machine tool", "cnc", "metal cutting", "welding line", 
-            "injection molding", "steel mill", "rolling process",
-            
-            # Building & Infrastructure Systems
-            "hvac", "building management", "warehouse automation", "storage system", 
-            "automated storage", "power distribution", "load management", 
-            "elevator control", "baggage handling system",
-            
-            # Energy & Utilities
-            "solar panel tracking", "solar panel control", "wind turbine control", 
-            "power plant", "energy management system", "water treatment", 
-            "pump station", "boiler control", "steam management",
-            
-            # Specialized Industries
-            "semiconductor", "cleanroom management", "hospital system", 
-            "patient bed management", "airport system", "baggage handling",
-            "fish farm", "water quality management", "pharmaceutical",
-            "food processing", "chemical reactor", "process safety",
-            
-            # General Industrial Terms (more specific)
-            "management system", "environmental control system", "climate control system",
-            "temperature control", "pressure control", "monitoring system",
-            "distribution system", "crane control", "hoist control", "textile loom",
-            "brewery fermentation", "mining conveyor", "paper mill", "automotive paint",
-            "glass manufacturing", "oil refinery", "greenhouse control", 
-            "irrigation system", "equipment monitoring", "factory equipment",
-            
-            # Additional essential terms
-            "automate my factory", "factory", "plant", "industrial equipment"
+        """
+        Check if the message should be considered off-topic.
+        
+        Returns False (off-topic) only if the message is:
+        1) A single word, OR
+        2) A common greeting/small talk phrase
+        
+        This makes the filter very restrictive - almost all messages are considered on-topic
+        unless they're clearly just greetings or single words.
+        """
+        message_stripped = message.strip()
+        message_lower = message_stripped.lower()
+        
+        # Check if it's a single word (no spaces)
+        if ' ' not in message_stripped and len(message_stripped) > 0:
+            return False  # Single word = off-topic
+        
+        # Common greeting/small talk phrases that should be considered off-topic
+        off_topic_phrases = [
+            "how are you",
+            "how are you?",
+            "how is it going",
+            "how is it going?",
+            "what's up",
+            "what's up?",
+            "whats up",
+            "whats up?",
+            "how's it going",
+            "how's it going?",
+            "hows it going",
+            "hows it going?",
+            "good morning",
+            "good afternoon", 
+            "good evening",
+            "good night",
+            "hello there",
+            "hi there",
+            "hey there",
+            "how do you do",
+            "how do you do?",
+            "nice to meet you",
+            "pleased to meet you",
+            "how have you been",
+            "how have you been?",
+            "long time no see",
+            "what's new",
+            "what's new?",
+            "whats new",
+            "whats new?",
+            "how's everything",
+            "how's everything?",
+            "hows everything",
+            "hows everything?",
+            "how are things",
+            "how are things?",
+            ".",
+            "?",
+            "!",
+            "...",
+            "test",
+            "testing",
         ]
         
-        message_lower = message.lower()
-        return any(keyword in message_lower for keyword in plc_keywords)
+        # Check if the message exactly matches any off-topic phrase
+        if message_lower in off_topic_phrases:
+            return False  # Common greeting/small talk = off-topic
+        
+        # Everything else is considered on-topic (PLC-related)
+        return True
     
     def _create_sample_projects_response(self, session_id: str) -> ContextUpdateResponse:
         """Create response with sample project options (randomly selected from 40 projects)."""
@@ -546,25 +574,49 @@ class SimplifiedContextService:
     ) -> ContextUpdateResponse:
         """Convert assistant response to ContextUpdateResponse."""
         
-        updated_context = assistant_response.get("updated_context", {})
+        # Clean the assistant response to remove any problematic field names
+        cleaned_response = self._clean_response_data(assistant_response)
+        updated_context = cleaned_response.get("updated_context", {})
         
         return ContextUpdateResponse(
             updated_context=ProjectContext(
                 device_constants=updated_context.get("device_constants", {}),
                 information=updated_context.get("information", "")
             ),
-            chat_message=assistant_response.get("chat_message", ""),
+            chat_message=cleaned_response.get("chat_message", ""),
             session_id=session_id,
-            is_mcq=assistant_response.get("is_mcq", False),
-            mcq_question=assistant_response.get("mcq_question"),
-            mcq_options=assistant_response.get("mcq_options", []),
-            is_multiselect=assistant_response.get("is_multiselect", False),
-            generated_code=assistant_response.get("generated_code"),
+            is_mcq=cleaned_response.get("is_mcq", False),
+            mcq_question=cleaned_response.get("mcq_question"),
+            mcq_options=cleaned_response.get("mcq_options", []),
+            is_multiselect=cleaned_response.get("is_multiselect", False),
+            generated_code=cleaned_response.get("generated_code"),
             current_stage=stage,
-            gathering_requirements_estimated_progress=assistant_response.get(
+            gathering_requirements_estimated_progress=cleaned_response.get(
                 "gathering_requirements_estimated_progress", 0.0
             )
         )
+
+    def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean response data to remove field names with leading underscores that Pydantic v2 doesn't allow."""
+        if not isinstance(data, dict):
+            return data
+        
+        cleaned = {}
+        for key, value in data.items():
+            # Skip fields that start with double underscores
+            if key.startswith('__'):
+                logger.warning(f"Skipping field with leading underscores: {key}")
+                continue
+            
+            # Recursively clean nested dictionaries
+            if isinstance(value, dict):
+                cleaned[key] = self._clean_response_data(value)
+            elif isinstance(value, list):
+                cleaned[key] = [self._clean_response_data(item) if isinstance(item, dict) else item for item in value]
+            else:
+                cleaned[key] = value
+        
+        return cleaned
     
     def _create_error_response(
         self, 

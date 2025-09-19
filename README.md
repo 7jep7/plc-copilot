@@ -158,7 +158,15 @@ const response = await fetch('/api/v1/context/update', {
 ```json
 {
     "updated_context": {
-        "device_constants": {},
+        "device_constants": {
+            "Device1.name": "VS-C1500CX",
+            "Device1.power.voltage": "24V",
+            "Device1.power.current": "150mA",
+            "Device1.io.digital_inputs": 16,
+            "Device1.io.digital_outputs": 16,
+            "Sensor1.model": "KV-8000A",
+            "Sensor1.communication.protocol": "Ethernet/IP"
+        },
         "information": "Updated project information..."
     },
     "chat_message": "I'd be happy to help with your conveyor belt system...",
@@ -172,6 +180,36 @@ const response = await fetch('/api/v1/context/update', {
     "gathering_requirements_estimated_progress": 0.3
 }
 ```
+
+#### Device Constants Structure
+
+The `device_constants` object supports **hierarchical/nested structure** using dot notation:
+
+```json
+{
+    "device_constants": {
+        "Device1.name": "VS-C1500CX",
+        "Device1.power.voltage": "24V",
+        "Device1.power.current": "150mA", 
+        "Device1.io.digital_inputs": 16,
+        "Device1.io.digital_outputs": 16,
+        "Device1.communication.protocol": "Modbus RTU",
+        "Device1.communication.baud_rate": 9600,
+        "Sensor1.model": "KV-8000A",
+        "Sensor1.range.temperature": "-10°C to 60°C",
+        "Sensor1.accuracy": "±0.1%",
+        "Motor1.type": "Servo Motor",
+        "Motor1.specifications.power": "1.5kW",
+        "Motor1.specifications.speed": "3000 RPM"
+    }
+}
+```
+
+This hierarchical structure allows for:
+- **Device grouping**: `Device1.property`, `Device2.property`
+- **Category organization**: `Device1.power.voltage`, `Device1.io.inputs`
+- **Nested specifications**: `Motor1.specifications.power`
+- **Clear relationships**: Between related parameters
 
 ### Session Management
 

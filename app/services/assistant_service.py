@@ -103,11 +103,16 @@ class AssistantService:
                 message_parts.append("### Project Information:")
                 message_parts.append(current_context["information"])
         
-        # Add file reference if files were uploaded
-        if file_ids:
-            message_parts.append("## URGENT FILE PROCESSING OVERRIDE")
+        # Add processing instructions based on mode
+        if file_ids and settings.USE_VECTOR_STORE:
+            # Vector store mode - files are available for search
+            message_parts.append("## VECTOR STORE FILE PROCESSING")
             message_parts.append(f"Files uploaded: {len(file_ids)} file(s) in vector store.")
-            message_parts.append("OVERRIDE NORMAL BEHAVIOR: Search uploaded files immediately and extract any visible device specifications. Do not defer. Do not say 'I will analyze later'. Extract whatever data you can find right now and update device_constants with ANY specifications found (even partial data is better than deferring). If you find a device model, voltage, current, I/O count, or any technical parameter - add it to device_constants immediately.")
+            message_parts.append("SEARCH UPLOADED FILES: Use your vector store search capabilities to find and extract device specifications from the uploaded files. Extract any visible device specifications, technical parameters, I/O details, and control requirements. Update device_constants with ANY specifications found (including partial data). If you find device models, voltages, currents, I/O counts, or technical parameters - add them to device_constants immediately.")
+        elif not settings.USE_VECTOR_STORE:
+            # Direct analysis mode - content provided in prompt
+            message_parts.append("## DIRECT CONTENT ANALYSIS")
+            message_parts.append("ANALYZE PROVIDED SPECIFICATIONS: Technical specifications have been extracted and provided directly in this prompt. Analyze the provided content to extract device constants, technical parameters, I/O specifications, and control requirements. Focus on actionable PLC programming information from the specifications provided below.")
         
         # Add the user message
         message_parts.append("## User Message")
@@ -157,6 +162,9 @@ class AssistantService:
             # The assistant should return valid JSON according to plc_response_schema
             response_data = json.loads(content)
             
+            # Clean the response to remove any problematic field names for Pydantic v2
+            response_data = self._clean_response_for_pydantic(response_data)
+            
             # Validate required fields
             required_fields = [
                 "updated_context", "chat_message", "is_mcq", 
@@ -179,8 +187,11 @@ class AssistantService:
             return response_data
             
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse assistant JSON response", error=str(e), content=content)
+            logger.error("Failed to parse assistant JSON response", error=str(e), content=content[:500])
             return self._create_fallback_response(f"JSON parsing error: {str(e)}")
+        except Exception as e:
+            logger.error("Error parsing assistant response", error=str(e), content=content[:500])
+            return self._create_fallback_response(f"Response parsing error: {str(e)}")
     
     def _get_default_value(self, field: str) -> Any:
         """Get default value for missing fields."""
@@ -195,6 +206,28 @@ class AssistantService:
             "gathering_requirements_estimated_progress": 0.0
         }
         return defaults.get(field, None)
+    
+    def _clean_response_for_pydantic(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean response data to remove field names with leading underscores that Pydantic v2 doesn't allow."""
+        if not isinstance(data, dict):
+            return data
+        
+        cleaned = {}
+        for key, value in data.items():
+            # Skip fields that start with double underscores (Pydantic v2 restriction)
+            if key.startswith('__'):
+                logger.warning(f"Skipping field with leading underscores in assistant response: {key}")
+                continue
+            
+            # Recursively clean nested dictionaries
+            if isinstance(value, dict):
+                cleaned[key] = self._clean_response_for_pydantic(value)
+            elif isinstance(value, list):
+                cleaned[key] = [self._clean_response_for_pydantic(item) if isinstance(item, dict) else item for item in value]
+            else:
+                cleaned[key] = value
+        
+        return cleaned
     
     def _create_fallback_response(self, error_message: str) -> Dict[str, Any]:
         """Create a fallback response when the assistant fails."""
