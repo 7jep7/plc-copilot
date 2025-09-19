@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_ASSISTANT_ID: str
     OPENAI_VECTOR_STORE_ID: str
+    USE_VECTOR_STORE: bool = False  # System-wide toggle for vector store usage
     
     # Email Configuration for Notifications
     SMTP_HOST: str = "smtp.gmail.com"

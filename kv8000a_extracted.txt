@@ -1,0 +1,111 @@
+
+--- Page 1 ---
+Data Sheet
+KV-8000A
+Programmable Logic Controller
+*Please note that accessories depicted in the image are for illustrative purposes only and may not be included with the product.
+Specifications
+Model KV-8000A
+General Power voltage System configuration using an expansion unit for KV-5000/3000 Series: 24 VDC
+specifications (±10%)
+System configuration using an expansion unit for KV-8000/7000 Series only: 24
+VDC (-15%/+20%)
+Operating ambient temperature System configuration using an expansion unit for KV-5000/3000 Series: 0 to
++50°C 32 to 122°F (No freezing)
+System configuration using an expansion unit for KV-8000/7000 Series only: 0 to
++55°C 32 to 131°F (No freezing)
+Operating ambient humidity System configuration using an expansion unit for KV-5000/3000 Series: 10 to 95%
+RH (No condensation)
+System configuration using an expansion unit for KV-8000/7000 Series only: 5 to
+95% RH (No condensation)
+Storage ambient temperature System configuration using an expansion unit for KV-5000/3000 Series: -20 to
++70°C -4 to +158°F
+System configuration using an expansion unit for KV-8000/7000 Series only: -25
+to +75°C -13 to +167°F
+Storage relative humidity System configuration using an expansion unit for KV-5000/3000 Series: 10 to 95%
+RH (No condensation)
+System configuration using an expansion unit for KV-8000/7000 Series only: 5 to
+95% RH (No condensation)
+Operating environment No dust or corrosive gas
+Operating altitude 2000 m 6561.7' or less
+Noise immunity 1500 Vp-p or more
+Pulse width: 1 μs, 50 ns (based on a noise simulator)
+IEC standard-compliant (IEC61000-4-2/3/4/6)
+Withstand voltage 1500 VAC, 1 minute (between the power supply terminal and the I/O terminals
+and between the external terminals and the case)
+Insulation resistance 50 MΩ or more (between the power terminals and the I/O terminals, and between
+the external terminals and the case, with 500 VDC megohmmeter)
+Vibration Intermittent Frequency 5 to Half amplitude 3.5 mm 0.14"*1
+resistance vibration 9 Hz
+Frequency 9 to Acceleration 9.8 m/s2 32.2'/s2*1
+150 Hz
+Continuous Frequency 5 to Half amplitude 1.75 mm 0.07"*1
+vibration 9 Hz
+Frequency 9 to Acceleration 4.9 m/s2 16.1'/s2*1
+150 Hz
+Internal current consumption 400 mA or less*2
+Shock resistance Acceleration 150 m/s2 492.1'/s2, Operation time 11 ms, twice in each of the X, Y
+and Z directions
+Overvoltage category I (II when using KV-PU1)
+Pollution degree 2
+Weight KV-8000A: Approx. 340 g
+KEYENCE AMERICA 1-888-539-3623(Toll Free) https://www.keyence.com 2025/09/17 Page 1 of 3
+--- Page 2 ---
+Data Sheet
+KV-B1 (battery): Approx. 10 g
+Performance Arithmetic control mode Stored program mode
+specifications
+I/O control mode Refresh mode
+Program language Expanded ladder, KV Script, mnemonic
+Number of commands Basic instructions: 80 classes, 181 instructions
+Applied instructions: 55 classes, 73 instructions
+Arithmetic operation instruction: 128 classes, 327 instructions
+Extended instructions: 78 classes, 133 instructions
+Total: 341 classes, 714 instructions
+Instruction execution speed Basic instructions: Min. 0.96 ns
+Applied instructions: Min. 5.75 ns
+Double precision floating-point instruction: Min. 58 ns
+CPU memory capacity 64 MB
+Program capacity Approx. 1500 k steps
+Maximum number of units to be installed 16 units (KV-8000/7000 Series expansion unit only)
+48 units (KV-8000/7000 Series expansion unit, KV-5000/3000 Series
+expansion unit (when extension unit (KV-EB1) is used))
+Maximum number of I/O points Maximum 3072 points for expansion
+(KV-EB1S/KV-EB1R: 2 units used, 64-point unit used)
+Bit device Input relay R Total 32000 points 1 bit
+Output relay R
+Internal auxiliary relay R
+Self-diagnosis function CPU error, RAM error, other
+Bit device Link relay B 32768 points 1 bit
+Internal auxiliary relay MR 64000 points 1 bit
+Latch relay LR 16000 points 1 bit
+Control relay CR 1280 points 1 bit
+Word device Timer T 4000 points 32 bits
+Counter C
+Data memory DM 65535 points 16 bits
+Expansion data memory EM
+File register Current bank 524288 points 16 bits
+FM
+Dial mode ZF
+Link register W 32768 points 16 bits
+Temporary memory TM 512 points 16 bits
+Index register Z 12 points 32 bits
+Control memory CM 7600 points 16 bits
+Number of Device comment Approx. 224000
+comments/
+Label Approx. 285000
+labels stored in
+main unit
+Power failure Program memory Flash ROM can be written 10000 times
+hold function
+Device Nonvolatile RAM
+Calendar timer Backup condenser lasts approx. 15 days (at 25°C 77°F)
+(Approx. 5 years with KV-B1 (battery) (at 25°C 77°F))
+*1 Compliant with JIS B 3502 and IEC61131-2, No. of scans: 10 times in each of X, Y, and Z directions (for 100 min.)
+*2 The maximum current consumption is 3.2 A when using the expansion unit.
+KEYENCE AMERICA 1-888-539-3623(Toll Free) https://www.keyence.com 2025/09/17 Page 2 of 3
+--- Page 3 ---
+Data Sheet
+Dimensions
+* Download CAD file or product manual for larger image/text and more detail.
+KEYENCE AMERICA 1-888-539-3623(Toll Free) https://www.keyence.com 2025/09/17 Page 3 of 3
