@@ -324,7 +324,7 @@ class SimplifiedContextService:
                         # Clean up the matched text
                         clean_match = matches[0].strip()
                         # Remove excessive whitespace and limit length per field
-                        clean_match = re.sub(r'\s+', ' ', clean_match)[:300]
+                        clean_match = re.sub(r'\s+', ' ', clean_match)[:900]
                         if clean_match and len(clean_match) > 3:  # Avoid very short matches
                             category_specs[spec_name] = clean_match
                 
@@ -341,7 +341,7 @@ class SimplifiedContextService:
             for pattern in table_patterns:
                 matches = re.findall(pattern, all_text, re.MULTILINE | re.DOTALL)
                 if matches:
-                    table_content = matches[0].strip()[:500]  # Limit table content
+                    table_content = matches[0].strip()[:1500]  # Limit table content
                     if 'Tables/Data' not in extracted_info:
                         extracted_info['Tables/Data'] = {}
                     extracted_info['Tables/Data'][f'Table_{len(extracted_info["Tables/Data"])+1}'] = table_content
@@ -350,7 +350,7 @@ class SimplifiedContextService:
             if extracted_info:
                 output_lines = []
                 total_chars = 0
-                max_chars = 8000  # Stay well below token limit (~2000 tokens)
+                max_chars = 24000  # Increased to allow more content (~6000 tokens)
                 
                 for category, specs in extracted_info.items():
                     category_section = f"\n## {category}:\n"
@@ -368,13 +368,14 @@ class SimplifiedContextService:
                 
                 result = "# Device Technical Specifications\n" + "".join(output_lines)
                 logger.info(f"Extracted {total_chars} characters of technical specifications")
+                # logger.info(f"Full extracted technical text (all_text):\n{all_text}")
                 return result
             
             # Fallback: extract key sections of original text
             sections = all_text.split('\n\n')
             important_sections = []
             total_chars = 0
-            max_chars = 6000
+            max_chars = 18000
             
             for section in sections:
                 if any(keyword in section.lower() for keyword in 
@@ -387,7 +388,7 @@ class SimplifiedContextService:
                 return "# Device Information\n\n" + "\n\n".join(important_sections)
             
             # Last resort: first portion of text
-            return f"# Device Information\n\n{all_text[:4000]}..."
+            return f"# Device Information\n\n{all_text[:12000]}..."
             
         except Exception as e:
             logger.error(f"Error extracting specifications: {e}")
